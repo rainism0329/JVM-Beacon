@@ -1,0 +1,166 @@
+# JVM Beacon
+
+IDEA 原生的 JMX 管理与 JVM 运行时诊断工作台。当前开发版本为 **0.7.0**（2026-09-24）：核心流程无需云账号、外部 AI 或上传运行数据。本仓库尚未发布到 Marketplace；名称、plugin ID 和发布者信息仍属开发阶段。
+
+0.7.0 增加 **Lock chains + 结构化线程比较**：沿实际 owner ID 查看等待者、持锁线程及栈；固定 A/B 快照，逐项查看状态、栈与锁变化；保存 v2 现场并离线重开，兼容读取 v1。保留 0.6.1 连接/趋势修复、Hot threads、多连接标签、Value explorer、`hostname:port`、MBean 数值追踪和受控方法调用。界面保持英文和原生主题。实际验收范围见 [验证记录](docs/validation.md) 和 [GUI 记录](docs/gui-validation.md)，仍是开发预览。
+
+第一次测试可按下方顺序操作：**安装 → 启动测试 JVM → 单连接流程 → 双连接标签页**。完整验收清单、预期结果和排错见 [测试指南](docs/testing.md)。文档中的待执行步骤不代表已经验收通过。
+
+源码仓库保留构建脚本、测试程序与文档；`build/`、IDE 沙箱、凭据/证书及诊断现场不进入 Git。文档中指向 `build/` 的安装包、截图和原始证据属于本地验证产物，新克隆需按下方命令生成，不能把 GitHub 上缺少这些附件理解为已发布安装包。
+
+## 安装与开始
+
+本轮开发与兼容性检查目标是 **IntelliJ IDEA Community / Ultimate 2025.1.3，IC/IU-251.26927.53，JBR 21，Windows**。Community 使用官方完整发行包；被监控测试程序使用 JDK 21。描述符允许的版本范围不等于全部版本均已实测，兼容性检查也不代替 GUI 验收。
+
+1. 在 IDEA 的 **Settings → Plugins → 齿轮 → Install Plugin from Disk…** 选择 [jvm-beacon-0.7.0.zip](build/distributions/jvm-beacon-0.7.0.zip)，按 IDE 提示重新启动；最终包验证状态见上方记录。
+2. 打开项目，通过 **View → Tool Windows → JVM Beacon** 打开底部工具窗口。
+3. 点击 **Connect JVM…**，选择当前用户可见的本地 Java 进程，或输入 PID。若该进程尚未开启本地管理端点，需要明确勾选 **Allow starting the local management agent if needed**；这会改变目标进程状态。
+4. 连接成功后核对顶部的目标身份和启动时间。默认开启观察模式，自动采样关闭；可在“Telemetry”手动采样或开启每 2 秒采样。
+
+本地可见不代表可 Attach；同用户权限、目标 JVM 配置、容器和操作系统限制均可能影响连接。第一次使用建议先运行下面的独立测试程序。
+
+## 用测试 JVM 走完真实流程
+
+在项目目录的 PowerShell 中设置 JDK 21，然后运行测试程序。脚本及程序只服务于本机可控验证；结束时在程序终端输入 quit 后按 Enter。
+
+```powershell
+Set-Location 'D:\IdeaProjects\JVM-Beacon'
+$env:JAVA_HOME = 'C:\Users\lenovo\.jdks\corretto-21.0.9'
+.\scripts\run-fixture.ps1
+```
+
+将工作区及 JDK 路径替换为你自己的路径。这个脚本只提供 **Local JVM / PID** 测试，不会打开远程端口。也可传入 `-DurationSeconds 600`，使 fixture 最多运行 10 分钟后退出；定时模式不读取 Enter，以到时退出为准。独立复现核心流程与资源基线运行 `./scripts/smoke-core.ps1`；成功会输出 `CORE_SMOKE_PASS`。2026-09-23 核心验证生成的真实示例现场在 `build/examples/fixture.jvmb`，可用于离线重开。
+
+运行 `./scripts/soak-core.ps1` 可进行默认 180 秒、每 2 秒一次的独立采集资源观察，生成 CSV 与报告；可用 `-DurationSeconds` 设为 20–600 秒。它使用自有认证 loopback JVM，并检查通知、现场读写和目标退出；测量的是独立采集进程，不代表整个 IDEA 的开销。[资源观察](docs/soak-validation.md) 分别保留 **2026-09-24 的 0.6.1 核心复测**与 2026-09-23 历史基线。真实 TLS 测试随 `test` 执行，边界见 [TLS 验证](docs/tls-validation.md)。
+
+程序会输出 PID 和 `READY`。测试 MBean 为 `dev.jvmbeacon.demo:type=Probe,name=Workbench`。
+
+1. **连接与指标**：在插件里选择该 PID，允许启动本地管理代理并连接。查看 heap、CPU、平台线程和 GC 等指标；缺失或不支持的值显示说明，不当作零。
+2. **搜索与复杂值**：进入“MBeans”，搜索 `dev.jvmbeacon.demo`，选择 Probe。选择 `Summary` 或 `Rows`，点击 **Explore value…**：Structure 可用方向键展开、按字段/类型/值搜索，Rows 表格应显示 `current → 7`、`next → 8`（尚未修改 Counter 时）。选择单元格查看类型和精确值，点击列标题排序。可以收藏 MBean。`Forbidden` 和 `Broken` 是故意设计的权限拒绝与异常属性，不会显示成 null。
+3. **属性与操作**：取消顶部“Read-only”，选择 `Counter`，点击“Edit attribute…”并输入 `12`，核对目标后确认。操作 `add` 输入 `2`、`3`，结果应为 `5`；`twice` 输入 JSON 数组 `[1,2,3]`，结果应为 `[2,4,6]`。调用 `inspectRows()` 后点击 **Explore result…** 查看返回表格；已经修改 Counter 时应为 `12`、`13`。每次都单独确认，超时不自动重试。
+4. **通知**：在“Notifications”页订阅当前 MBean，再调用 `emit`，输入一段测试文本。点击“Refresh”查看结果；最多保留最近 200 条，取消订阅会移除监听器。
+5. **平台线程与源码**：获取平台线程快照后，按名称/ID 或状态筛选，例如搜索 `beacon`；计数是匹配数/已采集数，过滤不会重新查询目标。选择线程阅读栈，双击有文件和行号的栈帧或按 Enter，会按精确二进制类名和成员关系查找项目或已附加源码；多个候选不自动导航。匿名/局部类只能匹配外层候选行时需要确认。源码版本仍须核对；fixture 的虚拟线程不在此采集范围内。
+6. **保存、重开与比较**：进入“Snapshots”，填写备注并保存 `.jvmb`。再采样或获取新线程快照后选择“Compare with file…”，固定结果不会被自动采样覆盖。双方身份匹配且都采过线程时，列出新增观察、未再观察及状态/栈/锁信息变化；不同目标、缺失或无效采集不输出线程变化计数。同 ID 只是匹配候选，不能据此证明持续阻塞、死锁或线程刚创建/结束。“Open snapshot…”成功后切换为离线阅读。
+7. **断开与退出**：在测试程序终端输入 quit 后按 Enter 退出，再手动采样以观察断连提示。也可以用“Disconnect / Stop waiting”主动断开；已采集数据保留并标记为过期。
+
+测试程序源码见 [DemoApplication.java](src/test/java/dev/jvmbeacon/fixture/DemoApplication.java)。它还提供 `fail`、有时间上限的 `slow`、有数量上限的 `burst`，供验证异常与有界缓冲。不要把这些验证操作应用于未知业务进程。
+
+## Trend 不动或显示 Stale 时
+
+连接后默认只采一个样本，**选择 Trend 下拉项只切换展示指标，不会启动采集**。点击图表下方 **Start live trend** 或勾选 **Auto · 2 s** 才持续采样；采样仍只在该连接页可见且无其他在途请求时进行。页脚显示 AUTO / PAUSED / DISCONNECTED / OFFLINE、最后采集时间和年龄、最多 120 点。点数与时间在增加但线为水平，表示该指标本轮值没有变化；试选 **JVM uptime (ms)** 来验证更新，空闲 fixture 的 heap/线程数可能长时间不变。
+
+图表内存按 MiB、纳秒计数按 ms 展示，原始表格/悬停保留源单位与精确值。只有一个点时居中提示，需要更多样本才能有线；恒定值居中绘制。缺失、超过 5 秒的间隔、重复/倒退时间戳不连线；暂停历史不会补采。上下界留白，悬停查看实际样本窗口，不用图表最近点冒充当前数据。
+
+**Stale 表示已断开，保留的是旧数据**。顶部保留断开原因；连接过程中会显示 Attach、管理代理、JMX/RMI、身份或初次采集阶段。连接等待上限 20 秒，普通请求仍为 8 秒；超时不等于目标已停止执行。网络池忙时保留已有连接并暂停自动采样，可在空闲后手动恢复，不自动重试写操作。
+
+默认 `run-fixture.ps1` **不设定时退出**，0.6.1 起需在终端输入 `quit` 再 Enter 才退出，单按 Enter 被忽略；终端关闭/输入流关闭也会结束 fixture，并打印原因。旧脚本单按 Enter 就退出，容易导致下一次采样变 Stale。若使用 `-DurationSeconds` 则到期结束，CPU 演示线程自己的 120 秒上限不代表整个 JVM 一定同时结束。重新启动 fixture 后一定按新输出 PID 连接；首次还需允许启动本地管理代理。
+
+## 排查锁等待与比较线程
+
+先排查锁等待可用 **Threads → Lock chains → Capture threads**。左侧按名称、ID、状态或 owner 筛选；选中等待者后，右侧按 `waiter → owner → …` 展示链路，点任一成员阅读其栈，再选帧 **Go to source**。所有筛选/选择只读已采集的数据，不会重新调用目标。
+
+在 **Threads → Compare** 点 **Pin baseline A**，释放竞争或等待业务变化后 **Capture threads → Compare A → current B**。结果是固定表格，包含状态 A/B、变化字段和首个不同栈帧，支持筛选、排序和复制。**Snapshots → Compare with file…** 同时生成此表格，文件作为 A、选择文件时的现场作为 B；后续实时采样不会覆盖它。
+
+测试 fixture 已有 `startLockContention(int seconds)` / `releaseLockContention()` 两个 MBean 操作，seconds 为 1–120。只有明确调用才创建三个线程；到期自动释放并退出，提前释放后暂保留线程至截止时间以便比较，再次启动会先清理上一组。完整步骤见 [锁链与比较测试](docs/testing.md#锁链与结构化线程比较070)。只在自有 fixture 上测试。
+
+想快速体验离线锁链/比较，可运行 `./scripts/capture-lock-demo.ps1 -JdkHome '<JDK21目录>'`。脚本自动启动一个认证 loopback 测试 JVM，采集真实竞争 A、主动释放后采集 B，校验变化后关闭该 JVM；结果保存在新建的 `build/examples/locks-时间戳/`。看到 `LOCK_CAPTURE_PASS` 后，在插件中打开 `locks-B.jvmb`，再 Compare with file 选择同目录 `locks-A.jvmb`。不需要抢在手动 fixture 的截止时间前操作。
+
+锁边按 owner ID 建立，同名不连边；`No owner reported` 不等于没有锁，未采到 owner 不等于线程已退出。JVM 死锁查询与链路中观察到的环单独解释。最多处理 512 个平台线程、每栈 64 帧、每条链 64 个成员；不覆盖虚拟线程，不推断两次采样间持续阻塞。`.jvmb` v2 保存 owner ID，读取 v1 时标为未采集；0.6.x 不能打开 v2。比较报告、Hot threads 和趋势本轮仍不随现场保存，可保存 A/B 两个现场后重新比较；栈仅持久化类/方法/文件/行，不含 module/class-loader 元数据。
+
+## 测量 CPU 活跃线程
+
+进入 **Threads → Hot threads → Measure CPU · 1 s**。插件读取两次批量线程 CPU 计数，中间等待 1 秒；表中按 CPU 增量排序，青绿短线表示相对于一个 CPU 核的近似占用。点击数值列标题排序、按名称/ID/状态筛选，选择线程查看精确纳秒增量和末次栈。选择栈帧后 **Go to source**、双击或 Enter 沿用源码匹配检查。
+
+**Capture details…** 给出目标、两个实际采集窗口、计数读取耗时、估算间隔和覆盖范围；**Copy report** 复制全部已采集行和末次栈，不受搜索筛选影响，不自动脱敏。每页只保留最后一次测量；断开标为 Stale，换目标或打开离线现场时清除。此报告暂不包含在 `.jvmb` 中。
+
+仅支持暴露 `com.sun.management.ThreadMXBean.getThreadCpuTime(long[])` 的目标；不支持、未开启、权限拒绝、计数不可得均有说明，插件不会自动启用 CPU 监控。最多选取 512 个基线平台线程、每个末次栈 64 帧；不覆盖虚拟线程和基线后新出现的线程。线程 ID 可能复用，名称相同也不能证明同一线程；计数降低或身份有变化时不计算增量。1 core = 100%，不是整机 CPU 百分比，远程时延会影响估算。**末次栈是另一次观察，不能据此认定哪个方法消耗了 CPU**；这还不是方法级 profiler。
+
+安全复现热点（仅自有测试进程）：
+
+```powershell
+.\scripts\run-fixture.ps1 -JdkHome 'C:\Users\lenovo\.jdks\corretto-21.0.9' -DurationSeconds 120 -CpuDemo
+```
+
+看到 PID 后立即连接并测量，`beacon-fixture-cpu-pulse` 应有非零 CPU 增量。脉冲每轮计算约 40 ms、等待至少 160 ms，最多 120 秒，并随测试程序停止清理；实际 CPU 百分比不保证固定。详细步骤见 [Hot threads 验收](docs/testing.md#hot-threads-验收)。
+
+## 多个连接：用标签页切换
+
+工具窗口标题栏的 **+ / New connection tab** 新建独立工作台；焦点在 JVM Beacon 内时也可按 **Alt+Insert**。在新页点击 **Connect JVM…**，选择第二个本地 PID 或 Remote JMX 地址。点击原生标签即可切换，标题包含页编号与目标运行时名称；悬停显示身份和连接状态。**Replace JVM…** 只替换当前页的目标，要保留原连接请先新建页。
+
+- 每页独立保留指标趋势、MBean 选择/搜索/结果、追踪、通知、线程、备注及现场比较。Read-only 默认开启，每页独立控制。MBean 收藏是应用级设置，切换回页时同步。
+- **只有当前可见页会自动轮询**；隐藏页保留连接和已采集数据，已订阅通知仍进入其最多 200 条的缓冲。切回后继续后续采样，不能补回隐藏期间历史。手动请求已发出时仍可能在后台完成。
+- 标签上的关闭按钮只断开并释放该页。未保存的现场和备注随页关闭丢弃；目标上已开始的操作可能继续，关闭不表示撤销。关闭最后一页时 IDEA 会收起工具窗口；再次打开时已有新的空白工作台。
+- 每项目最多 8 页（含离线和空白页）；所有项目共同遵守 4 个网络工作线程、16 个连接许可。页不会跨 IDE 重启恢复，也不自动重连。离线现场可在新页中打开，与其他活动连接并存；当前不提供多目标联合图表。
+
+**双 JVM 测试**：在两个 PowerShell 终端分别运行上面的 `run-fixture.ps1`，记录不同 PID 为 A、B。第一页连 A，再用 **+** 连 B。只在 A 关闭 Read-only 并将 `Counter` 改为 `12`；切到 B 后应仍为 Read-only，读取 `Counter` 应为 `7`。切回 A 应保留搜索和结果。关闭 A 标签后，在 B 点击 **Sample now** 仍应成功。详细的退出、追踪及离线共存检查见 [测试指南](docs/testing.md#双连接验收)。
+
+## 远程连接与数据边界
+
+“Remote JMX”接受 `hostname:port`（例如 `my-server:9010`）、IPv4、`[::1]:9010` 或完整的 `service:jmx:rmi:…` URL。输入框下方显示实际端点：`my-server:9010` 展开为 `service:jmx:rmi:///jndi/rmi://my-server:9010/jmxrmi`；自定义 registry binding 继续输入完整 URL。目标必须已启用远程 JMX，简写不自动配置目标、网络或 TLS。
+
+用户名与密码单独填写。**RMI registry 使用 TLS** 默认开启；它仅控制 registry，JMX server 的 TLS 仍由服务端 stub 决定，应匹配服务端配置。证书信任使用运行 IDEA 的 JBR，不会自动关闭校验。远程连接还需要核对 stub 中的主机名、第二个 RMI 端口、网络路由及服务端授权。IPv6 地址解析已有测试；实际 IPv6 网络连接尚未验证。
+
+凭据可显式从 PasswordSafe 载入，或在连接成功后保存；不写入项目配置、日志或现场文件。客户端观察模式只是防误触，不能替代服务端权限。读取属性也可能有开销或副作用。
+
+简写与其等价标准完整 URL 使用同一个凭据键；不同端口和用户名隔离。不会将 DNS 别名、`localhost` 与 IP 地址自动合并。
+
+## 追踪一个 MBean 数值
+
+在 **MBeans → Attributes** 选择可读数值属性，点击 **Watch attribute…**，核对目标及 getter 的潜在开销后 **Start tracking**。例如 fixture 的 `ElapsedMillis` 会递增，`Counter` 初始为 7。**Watch** 页呈现独立采集窗口、趋势和精确值表；可 Pause / Resume 或 Clear history。读取失败、null、NaN、不支持的返回类型会留下原因并暂停，不当作零。
+
+一次追踪一个数值属性，最多 120 点（含暂停/失败间断标记），工作台可见且无在途请求时每 2 秒尝试采集；与标准指标共用调度。图表使用近似 double，数值表保留受支持值的精确文本，单位未提供时明确为未知。不能补采暂停期间的历史；取消不保证 getter 已停止。断开后保留 STALE，连接另一个 JVM 或离线打开现场会清除旧追踪。**追踪历史不包含在 `.jvmb` 文件中**。
+
+指标时间窗口表示客户端读取的起止时间。MBean 读取和操作结果也显示后台实际采集窗口，多属性逐项读取并非原子快照。`ProcessCpuLoad` 的近期负载由目标 JVM 计算，其内部统计窗口不等于插件的 2 秒轮询间隔；GC 次数/时间、进程 CPU 时间为累计量。
+
+现场格式只保存目标标识、一次已采集的指标、一次平台线程快照和备注，并保留各自采集窗口与缺失信息。它不保存任意 MBean 值、通知、连接 URL、凭据、命令行或整个趋势历史。**目标标识、线程名、栈、锁信息和备注不自动脱敏**，分享前请自行审查。
+
+## 阅读复杂 MBean 结果
+
+**Explore value… / Explore result…** 展示这次已采集的值、目标和实际读取/调用窗口。`CompositeData` 展开字段，数组显示下标，`TabularData` 显示索引字段并额外提供 Rows 表格；行号不代表跨采集的身份。搜索只影响 Structure，匹配节点的祖先用于保留上下文；Rows 始终显示捕获的行，当前按显示文本排序，不做数值大小推断。原始文本仍可在主工作台复制，树里的 **Copy value** 复制所选节点值（容器节点为摘要）。
+
+工具窗口较矮时可向上拖动顶部边缘，表格与详情之间的细分隔线也可拖动。长文本可以滚动阅读，Rows 的列宽可以调整。此版查看器每次在当前屏幕居中打开，内部的分隔比例会保留。
+
+后台转换后仅保留不可变展示模型，不将任意远程对象交给 EDT。每个值最多 512 节点、32768 个字符、深度 6、每个容器 100 子项；整批属性额外共享 4096 节点和 262144 字符预算。截断、循环、不支持和读取失败分别说明；超出批次预算的值保留文本提示，禁用 Explore。展示限制不能限制 RMI 接收巨大对象的反序列化开销。嵌套表格可在 Structure 展开，Rows 仅用于顶层 `TabularData`，没有强行展开任意 Java 对象。
+
+查看器的展开、排序、搜索、复制不重复读取目标。返回值不自动脱敏、不进入 `.jvmb`；再次选择操作会清除上次结果。整个读取/调用流程仍遵守超时、取消和不自动重试的约束。
+
+## 当前能力与限制
+
+- 本地 Attach、远程 JMX/RMI；连接身份、失败阶段提示及手动重连。暂不支持运行配置自动关联、SSH、Jolokia 或容器自动发现。
+- ObjectName 搜索与应用级收藏；属性读取、复杂值文本/结构树/顶层表格、严格类型校验后的写入和精确签名操作调用。编辑支持基础标量、常用数值类型、`ObjectName`、基础类型数组和 `String[]`；不反射构造任意目标对象。
+- 选中 MBean 时读取其可读属性，并对展示数量和文本设上限；这些展示限制不能限制 RMI 接收巨大对象时的反序列化开销，当前仅连接可信目标。
+- 实际指标与最多 120 点趋势，2 秒可选采样，无请求重叠；超过 5 秒的采样间隔不连接折线。暂不提供健康分、自动根因判断或 JFR 分析。
+- ThreadMXBean 平台线程快照、名称/ID/状态筛选：最多 512 条线程、每栈最多 64 帧，明确标识截断。现场线程比较只处理已采集范围，最多显示 200 条差异。缺失不等于零，栈未变化不等于持续阻塞；不覆盖虚拟线程。源码和运行字节码版本的一致性仍需用户确认。
+- `.jvmb` 现场保存、离线重开与文本比较；文件上限 5 MiB。指标与线程可能在不同时间采集，不是原子快照，也不能恢复未采集历史。
+- 每个视图最多一个在途任务；连接截止时间 20 秒，普通请求 8 秒。取消或超时不保证底层 Attach/RMI 已停止；迟到结果丢弃，修改结果可能未知。全局网络/Attach 池最多 4 个线程，本地文件与 PasswordSafe I/O 池最多 2 个线程，均无任务队列且彼此隔离；网络池耗尽不会占用离线任务的执行名额。16 个连接许可覆盖连接中、活动和关闭阶段，每个已接纳连接预留清理容量。
+
+不同 IDEA、JDK、操作系统、真实 TLS 环境及长时间运行的验证范围请以 [验证记录](docs/validation.md) 为准，不能由编译或单元测试结果推断。
+
+## 构建与验证
+
+构建需要 **JDK 21**；IDE 运行时使用目标 IDEA 自带 **JBR 21**；首轮目标 JVM 使用 **JDK 21**。三者是不同的环境要求。
+
+```powershell
+$env:JAVA_HOME = 'C:\Users\lenovo\.jdks\corretto-21.0.9'
+$beaconIde = 'D:\IdeaProjects\JVM-Beacon\.intellijPlatform\ides\community-2025.1.3'
+.\gradlew.bat test buildPlugin "-PlocalIdePath=$beaconIde"
+```
+
+构建产物位于 `build/distributions/`，测试报告位于 `build/reports/tests/test/index.html`。首次构建可能需要下载 Gradle、构建插件和测试依赖；`localIdePath` 指向完整 IDEA 安装目录。上例使用本机官方 Community 包，也可将 `$beaconIde` 改为 `E:\JetBrains\IntelliJ IDEA 2025.1.3` 或自己的安装路径。
+
+```powershell
+# 官方兼容性检查
+.\gradlew.bat verifyPlugin "-PlocalIdePath=$beaconIde"
+
+# 对同一个安装包追加第二个 IDE 的兼容性检查
+.\gradlew.bat verifyPlugin "-PlocalIdePath=$beaconIde" '-PadditionalVerificationIdePath=E:\JetBrains\IntelliJ IDEA 2025.1.3'
+
+# 在独立开发沙箱中启动 IDEA
+.\gradlew.bat runIde "-PlocalIdePath=$beaconIde"
+```
+
+`additionalVerificationIdePath` 为 `verifyPlugin` 增加第二个目标 IDE；构建和开发沙箱仍使用 `localIdePath`。
+
+自动化测试仅连接自己启动且会清理的 fixture JVM；认证远程 fixture 仅监听 loopback。`verifyPlugin`、插件加载和交互验收的实际成功、失败与未验证项集中记录在 [docs/validation.md](docs/validation.md)。
+
+开发入口：[AGENTS.md](AGENTS.md) · [调研与证据](docs/research.md) · [产品/工程决策及路线](docs/decisions.md) · [验证与接续状态](docs/validation.md)。

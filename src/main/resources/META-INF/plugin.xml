@@ -1,0 +1,16 @@
+<idea-plugin>
+    <id>dev.jvmbeacon</id>
+    <name>JVM Beacon</name>
+    <vendor>JVM Beacon contributors (development build)</vendor>
+    <description><![CDATA[
+      An IDEA-native JMX and JVM runtime workbench. Connect to local or remote JVMs,
+      inspect MBeans, capture platform threads and save diagnostic evidence locally.
+      Development preview; no cloud account or telemetry.
+    ]]></description>
+    <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.java</depends>
+    <extensions defaultExtensionNs="com.intellij">
+        <toolWindow id="JVM Beacon" anchor="bottom" icon="/icons/beacon.svg" canCloseContents="true"
+                    factoryClass="dev.jvmbeacon.ui.BeaconToolWindowFactory"/>
+    </extensions>
+</idea-plugin>
