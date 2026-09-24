@@ -27,6 +27,7 @@ import dev.jvmbeacon.core.StructuredValue;
 import dev.jvmbeacon.core.TrendSeries;
 import dev.jvmbeacon.core.ThreadComparison;
 import dev.jvmbeacon.core.LockChains;
+import dev.jvmbeacon.core.ConnectionIdentity;
 
 import javax.management.MBeanInfo;
 import javax.management.MBeanOperationInfo;
@@ -67,6 +68,9 @@ public final class BeaconPanel extends JPanel implements Disposable {
     private final JLabel target = BeaconUi.label("Disconnected · Start a Java app, then connect locally or through JMX", true);
     private final JTextArea status = textArea("Connect to a JVM to begin, or open a snapshot to inspect captured metrics and platform threads offline.", 2);
     private final JButton connect = new JButton("Connect JVM…");
+    private final JButton reconnect = new JButton(com.intellij.icons.AllIcons.Actions.Refresh);
+    private ConnectionDialog.Target lastTarget;
+    private String identityNotice;
     private final JButton disconnect = new JButton("Disconnect / Stop waiting");
     private final JCheckBox observe = new JCheckBox("Read-only", true);
     private final JCheckBox autoSample = new JCheckBox("Auto · 2 s", false);
@@ -172,7 +176,7 @@ public final class BeaconPanel extends JPanel implements Disposable {
         threadDetail.setLineWrap(true); threadDetail.setWrapStyleWord(true);
         BeaconUi.table(attributes, "Select an MBean to inspect its attributes");
         trendMetric.setRenderer(new DefaultListCellRenderer() {{ putClientProperty("html.disable", Boolean.TRUE); }});
-        JPanel header = BeaconUi.panel(12); header.setBorder(JBUI.Borders.empty(12, 16));
+        JPanel header = BeaconUi.panel(4); header.setBorder(JBUI.Borders.empty(12, 16));
         JPanel identityPanel = BeaconUi.panel(4);
         JLabel brand = BeaconUi.title("JVM Beacon"); brand.putClientProperty("beacon.fontScale", 1.18f);
         brand.setIcon(BeaconUi.signalIcon()); brand.setIconTextGap(JBUI.scale(8));
@@ -181,9 +185,9 @@ public final class BeaconPanel extends JPanel implements Disposable {
         connectionNotice.setLineWrap(true); connectionNotice.setWrapStyleWord(true); connectionNotice.setVisible(false);
         connectionNotice.setBackground(BeaconUi.SURFACE); connectionNotice.setForeground(BeaconUi.MUTED); connectionNotice.setBorder(JBUI.Borders.empty());
         JPanel targetDetails = BeaconUi.panel(4); targetDetails.add(target, BorderLayout.NORTH); targetDetails.add(connectionNotice, BorderLayout.CENTER);
-        identityPanel.add(targetDetails, BorderLayout.SOUTH);
+        header.add(targetDetails, BorderLayout.SOUTH);
         header.add(identityPanel, BorderLayout.CENTER);
-        JPanel toolbar = row(observe, connect, disconnect);
+        JPanel toolbar = row(observe, connect, reconnect, disconnect);
         toolbar.setLayout(new FlowLayout(FlowLayout.LEFT, JBUI.scale(6), JBUI.scale(3)));
         header.add(toolbar, BorderLayout.EAST);
         add(header, BorderLayout.NORTH);
@@ -208,6 +212,9 @@ public final class BeaconPanel extends JPanel implements Disposable {
         };
         statusBar.add(statusScroll, BorderLayout.CENTER); add(statusBar, BorderLayout.SOUTH);
         connect.addActionListener(e -> connect());
+        reconnect.setToolTipText("Reconnect to the previous endpoint. Starts a fresh read-only session; nothing is resumed automatically.");
+        reconnect.getAccessibleContext().setAccessibleName("Reconnect to previous endpoint");
+        reconnect.addActionListener(e -> reconnect());
         disconnect.addActionListener(e -> {
             boolean pending = runner.isBusy();
             connectionProblem = "Disconnected by user. Captured data is retained; connect again to resume.";
@@ -487,9 +494,10 @@ public final class BeaconPanel extends JPanel implements Disposable {
         String text = mode + "\n" + age + "\n" + history.size() + " / 120 samples · Missing values or gaps > 5 s break the line.";
         if (!text.equals(trendInfo.getText())) { trendInfo.setText(text); trendInfo.setCaretPosition(0); }
         startTrend.setVisible(client != null && !autoSample.isSelected() && !offline);
-        String notice = connectionProblem == null ? "" : connectionProblem;
+        String notice = connectionProblem == null ? Objects.requireNonNullElse(identityNotice, "") : connectionProblem;
         if (!notice.equals(connectionNotice.getText())) { connectionNotice.setText(notice); connectionNotice.setCaretPosition(0); }
-        connectionNotice.setToolTipText(notice.isEmpty() ? null : "Connection: " + notice); connectionNotice.setVisible(connectionProblem != null);
+        connectionNotice.setRows(connectionProblem == null ? 1 : 2);
+        connectionNotice.setToolTipText(notice.isEmpty() ? null : "Connection: " + notice); connectionNotice.setVisible(!notice.isEmpty());
     }
 
     private record WatchPoll(JmxClient.Sample metrics, String notifications, AttributeSeries.Reading reading) { }
@@ -646,7 +654,44 @@ public final class BeaconPanel extends JPanel implements Disposable {
         ConnectionDialog dialog = new ConnectionDialog(project);
         if (!dialog.showAndGet()) return;
         ConnectionDialog.Request request = dialog.request();
+        connect(request);
+    }
+
+    private void reconnect() {
+        if (lastTarget == null || offline || runner.isBusy()) return;
+        ConnectionDialog.Target target = lastTarget;
+        if (target.local() || target.username().isEmpty()) { connect(reconnectRequest(target, new char[0])); return; }
+        // Read on the dedicated local lane. Cancellation also wipes credentials returned late.
+        background("Read credentials for explicit reconnect", false, () -> {
+            Credentials found = PasswordSafe.getInstance().get(ConnectionDialog.credentialKeyFor(target.address(), target.username()));
+            return new ReconnectSecret(found == null || found.getPassword() == null ? null : found.getPassword().toCharArray());
+        }, secret -> {
+            try {
+                if (secret.value == null) {
+                    ConnectionDialog dialog = new ConnectionDialog(project, target);
+                    if (dialog.showAndGet()) connect(dialog.request());
+                } else connect(reconnectRequest(target, secret.take()));
+            } finally { secret.close(); }
+        });
+    }
+
+    static final class ReconnectSecret implements BeaconExecutors.ManagedConnection {
+        private char[] value;
+        ReconnectSecret(char[] value) { this.value = value; }
+        char[] take() { char[] taken = value; value = null; return taken; }
+        @Override public void close() { if (value != null) { Arrays.fill(value, '\0'); value = null; } }
+    }
+
+    static ConnectionDialog.Request reconnectRequest(ConnectionDialog.Target target, char[] password) {
+        // Do not carry forward agent-start permission or credential-saving requests.
+        return new ConnectionDialog.Request(target.local(), target.address(), false, target.username(), password,
+                target.tlsRegistry(), false, target.profile(), target.alias(), target.previous());
+    }
+
+    private void connect(ConnectionDialog.Request request) {
+        if (disposed || runner.isBusy()) { request.erasePassword(); return; }
         releaseSession();
+        lastTarget = request.target(request.previous()); identityNotice = null;
         connectionProblem = null; connectStarted = System.nanoTime();
         AtomicReference<String> stage = new AtomicReference<>("Waiting for a connection worker"); connectionStage = stage;
         status("Connecting and verifying target identity…");
@@ -673,6 +718,19 @@ public final class BeaconPanel extends JPanel implements Disposable {
             if (disposed) { SessionRunner.closeLater(result); return; }
             connectionStage.set(null); connectionProblem = null;
             session = result; client = result.client(); identity = result.identity(); offline = false;
+            lastTarget = request.target(identity);
+            ConnectionIdentity.Match match = ConnectionIdentity.compare(request.previous(), identity);
+            identityNotice = switch (match) {
+                case FIRST -> null;
+                case SAME_REPORTED_IDENTITY -> "RECONNECTED · Same reported JVM identity. Fresh capture; read-only was reset and sampling was not resumed.";
+                case CHANGED -> "TARGET CHANGED · Previous start " + time(request.previous().startTime()) + " → " + time(identity.startTime())
+                        + ". Reported JVM identity differs. Fresh read-only session; previous actions were not resumed.";
+                case INCOMPLETE -> "IDENTITY UNVERIFIED · Incomplete JVM identity metadata. A fresh read-only session started; no previous actions were resumed.";
+            };
+            if (request.profile() != null) {
+                try { ConnectionWorkspace.getInstance().recordSuccess(request.profile(), identity, System.currentTimeMillis()); }
+                catch (IllegalArgumentException ignored) { identityNotice = "IDENTITY NOT SAVED · Connected, but target metadata exceeds saved-setup limits. This capture remains available."; }
+            }
             hotThreads.clear();
             resetThreadComparison();
             watchTarget = null; watching = false; watchGeneration++; watchSeries.clear(); renderWatch();
@@ -1074,7 +1132,7 @@ public final class BeaconPanel extends JPanel implements Disposable {
                 });
             } else background("Load snapshot", false, () -> SnapshotStore.load(path), loaded -> {
                 releaseSession(); offline = true; identity = loaded.identity(); history.clear(); trendMetric.removeAllItems();
-                connectionProblem = null;
+                connectionProblem = null; identityNotice = null; lastTarget = null;
                 hotThreads.clear();
                 resetThreadComparison();
                 watchTarget = null; watchSeries.clear(); renderWatch();
@@ -1119,6 +1177,7 @@ public final class BeaconPanel extends JPanel implements Disposable {
         compareThreads.setEnabled(threadBaseline != null && dump != null && !runner.isBusy());
         liveActions.forEach(button -> button.setEnabled(live)); observe.setEnabled(live); autoSample.setEnabled(live);
         disconnect.setEnabled(live || runner.isBusy()); connect.setText(live ? "Replace JVM…" : "Connect JVM…");
+        reconnect.setEnabled(lastTarget != null && !offline && !runner.isBusy());
         disconnect.setText(runner.isBusy() ? "Stop waiting" : "Disconnect");
         disconnect.setToolTipText("Disconnect and stop waiting. The underlying call may continue; mutation outcome may be unknown.");
         BeaconUi.connectionBadge(connectionState, live, offline, identity != null);
@@ -1132,7 +1191,7 @@ public final class BeaconPanel extends JPanel implements Disposable {
     JComponent connectionFocus() { return connect; }
     void setPresentationListener(Runnable listener) { presentationListener = listener; listener.run(); }
     String tabTitle(int id) {
-        String name = identity == null ? "New connection" : identity.runtimeName().replaceAll("[\\p{Cntrl}\\s]+", " ").trim();
+        String name = !offline && lastTarget != null && !lastTarget.alias().isBlank() ? lastTarget.alias() : identity == null ? "New connection" : identity.runtimeName().replaceAll("[\\p{Cntrl}\\s]+", " ").trim();
         if (name.length() > 28) name = name.substring(0, 27) + "…";
         String state = client != null ? "" : runner.isBusy() ? " · Waiting" : offline ? " · Snapshot" : identity != null ? " · Stale" : "";
         return id + " · " + name + state;

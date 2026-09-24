@@ -15,6 +15,7 @@ import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.UIUtil;
 import dev.jvmbeacon.core.JmxClient;
 import dev.jvmbeacon.core.RemoteEndpoint;
+import dev.jvmbeacon.core.ConnectionProfile;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
@@ -22,12 +23,18 @@ import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import java.awt.*;
 import java.util.Arrays;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Locale;
 
 final class ConnectionDialog extends DialogWrapper {
+    record Target(boolean local, String address, String username, boolean tlsRegistry,
+                  ConnectionProfile profile, String alias, JmxClient.Identity previous) { }
     record Request(boolean local, String address, boolean allowAgent, String username, char[] password,
-                   boolean tlsRegistry, boolean remember) {
+                   boolean tlsRegistry, boolean remember, ConnectionProfile profile, String alias, JmxClient.Identity previous) {
         void erasePassword() { Arrays.fill(password, '\0'); }
         CredentialAttributes credentialKey() { return credentialKeyFor(address, username); }
+        Target target(JmxClient.Identity identity) { return new Target(local, address, username, tlsRegistry, profile, alias, identity); }
     }
 
     private final SessionRunner runner = new SessionRunner();
@@ -42,13 +49,28 @@ final class ConnectionDialog extends DialogWrapper {
     private final JPasswordField password = new JPasswordField();
     private final JCheckBox tlsRegistry = new JCheckBox("Use TLS for the RMI registry", true);
     private final JCheckBox remember = new JCheckBox("Remember credentials after connecting", false);
+    private final JCheckBox saveProfile = new JCheckBox("Save connection setup in this IDE", true);
+    private final JBTextField alias = new JBTextField(), group = new JBTextField();
+    private final JBTextField savedSearch = new JBTextField();
+    private final JCheckBox recentOnly = new JCheckBox("Recently used", false);
+    private final DefaultListModel<ConnectionProfile> savedModel = new DefaultListModel<>();
+    private final JBList<ConnectionProfile> savedList = new JBList<>(savedModel);
+    private final JTextArea savedDetails = description("Select a saved connection to review its address and identity.", 5);
+    private final ConnectionWorkspace workspace = ConnectionWorkspace.getInstance();
+    private String profileId;
+    private final Target initialTarget;
     private final JTextArea message = description("Discovering Java processes visible to the current user…", 2);
     private String localMessage = "Discovering local JVMs…";
     private boolean localError;
     private Request request;
 
     ConnectionDialog(Project project) {
+        this(project, null);
+    }
+
+    ConnectionDialog(Project project, Target seed) {
         super(project, true);
+        initialTarget = seed;
         setTitle("Connect JVM · JVM Beacon");
         setOKButtonText("Connect");
         setCancelButtonText("Cancel");
@@ -64,9 +86,15 @@ final class ConnectionDialog extends DialogWrapper {
         username.getDocument().addDocumentListener(clearCredential);
         updateEndpointPreview();
         tabs.addChangeListener(e -> {
+            setOKButtonText(tabs.getSelectedIndex() == 2 ? "Use setup…" : "Connect");
             if (tabs.getSelectedIndex() == 0) showMessage(localMessage, localError);
-            else showMessage("Remote JMX must already be enabled. Verify the advertised RMI host, ports and transport settings.", false);
+            else if (tabs.getSelectedIndex() == 1) showMessage("Remote JMX must already be enabled. Verify the advertised RMI host, ports and transport settings.", false);
+            else { refreshSaved(); showMessage("Saved setup stays in this IDE. Selecting an entry does not contact its target.", false); }
         });
+        if (seed != null) {
+            if (seed.local()) { pid.setText(seed.address()); allowAgent.setSelected(false); }
+            else { applyTarget(seed); }
+        } else if (!workspace.all().isEmpty()) tabs.setSelectedIndex(2);
         refreshProcesses();
     }
 
@@ -77,6 +105,7 @@ final class ConnectionDialog extends DialogWrapper {
         tabs.setBorder(JBUI.Borders.empty());
         tabs.addTab("Local processes", localPage());
         tabs.addTab("Remote JMX", remotePage());
+        tabs.addTab("Saved connections", savedPage());
         panel.add(tabs, BorderLayout.CENTER);
         message.setBorder(JBUI.Borders.empty(0, 4));
         message.getAccessibleContext().setAccessibleName("Connection setup status");
@@ -142,6 +171,17 @@ final class ConnectionDialog extends DialogWrapper {
         endpoint.add(endpointPreview, BorderLayout.SOUTH);
         endpointPreview.getAccessibleContext().setAccessibleName("Resolved JMX endpoint");
         remote.add(endpoint, c); c.gridy++;
+        JPanel naming = new JPanel(new GridLayout(1, 2, JBUI.scale(16), 0));
+        naming.add(labeledField("Alias (optional)", alias)); naming.add(labeledField("Group (optional)", group));
+        remote.add(naming, c); c.gridy++;
+        JPanel profileActions = new JPanel(new BorderLayout(JBUI.scale(8), 0));
+        profileActions.add(saveProfile, BorderLayout.WEST);
+        saveProfile.setToolTipText("Stores address, username, alias, group and reported JVM identity in local IDE settings. Passwords use PasswordSafe separately.");
+        JButton save = new JButton("Save setup"), asNew = new JButton("Save as new");
+        save.addActionListener(e -> saveSetup(false)); asNew.addActionListener(e -> saveSetup(true));
+        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, JBUI.scale(5), 0)); buttons.add(save); buttons.add(asNew);
+        profileActions.add(buttons, BorderLayout.EAST);
+        remote.add(profileActions, c); c.gridy++;
         JPanel authentication = new JPanel(new GridLayout(1, 2, JBUI.scale(16), 0));
         authentication.add(labeledField("Username (optional)", username));
         authentication.add(labeledField("Password", password));
@@ -169,6 +209,84 @@ final class ConnectionDialog extends DialogWrapper {
         JBScrollPane scroll = new JBScrollPane(remote, ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED, ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
         scroll.setBorder(JBUI.Borders.empty());
         return scroll;
+    }
+
+    private JComponent savedPage() {
+        JPanel page = BeaconUi.panel(8); page.setBorder(JBUI.Borders.empty(12, 4));
+        savedSearch.getEmptyText().setText("Search alias, group, address or username…");
+        savedSearch.getAccessibleContext().setAccessibleName("Search saved connections");
+        savedSearch.getDocument().addDocumentListener(new DocumentListener() {
+            public void insertUpdate(DocumentEvent e) { refreshSaved(); }
+            public void removeUpdate(DocumentEvent e) { refreshSaved(); }
+            public void changedUpdate(DocumentEvent e) { refreshSaved(); }
+        });
+        recentOnly.addActionListener(e -> refreshSaved());
+        JPanel filters = BeaconUi.panel(6); filters.add(savedSearch, BorderLayout.CENTER); filters.add(recentOnly, BorderLayout.EAST);
+        page.add(filters, BorderLayout.NORTH);
+        savedList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        savedList.setCellRenderer(new DefaultListCellRenderer() {
+            { putClientProperty("html.disable", Boolean.TRUE); }
+            @Override public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean selected, boolean focus) {
+                ConnectionProfile p = (ConnectionProfile) value;
+                return super.getListCellRendererComponent(list, (p.group().isEmpty() ? "" : p.group() + " / ") + p.label(), index, selected, focus);
+            }
+        });
+        savedList.addListSelectionListener(e -> {
+            ConnectionProfile p = savedList.getSelectedValue();
+            savedDetails.setText(p == null ? "Select a saved connection; filtering never contacts the target." : p.label() + "\n" + p.address()
+                    + "\nUsername: " + (p.username().isEmpty() ? "Not set" : p.username()) + " · Registry TLS: " + p.tlsRegistry()
+                    + "\nLast success: " + (p.lastUsed() == 0 ? "Never" : java.time.Instant.ofEpochMilli(p.lastUsed()))
+                    + "\nPrevious JVM: " + (p.lastIdentity() == null ? "Not recorded" : p.lastIdentity().runtimeName() + " · Started " + java.time.Instant.ofEpochMilli(p.lastIdentity().startTime())));
+            savedDetails.setCaretPosition(0);
+        });
+        page.add(BeaconUi.scroll(savedList), BorderLayout.CENTER);
+        JButton use = new JButton("Use setup…"), forget = new JButton("Forget setup");
+        use.addActionListener(e -> useSaved());
+        savedList.addMouseListener(new java.awt.event.MouseAdapter() { @Override public void mouseClicked(java.awt.event.MouseEvent e) { if (e.getClickCount() == 2) useSaved(); } });
+        forget.addActionListener(e -> {
+            ConnectionProfile p = savedList.getSelectedValue(); if (p == null) return;
+            if (com.intellij.openapi.ui.Messages.showYesNoDialog(getContentPane(), "Forget this saved connection setup?\nCredentials in PasswordSafe are retained; existing connections stay open.", "Forget Connection Setup", com.intellij.openapi.ui.Messages.getQuestionIcon()) == com.intellij.openapi.ui.Messages.YES) {
+                workspace.forget(p.id()); if (p.id().equals(profileId)) profileId = null; refreshSaved();
+            }
+        });
+        JPanel bottom = BeaconUi.panel(6);
+        savedDetails.setFocusable(true);
+        JBScrollPane detailsScroll = BeaconUi.scroll(savedDetails);
+        detailsScroll.setPreferredSize(JBUI.size(580, 110));
+        bottom.add(detailsScroll, BorderLayout.CENTER);
+        JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT, JBUI.scale(6), 0)); actions.add(use); actions.add(forget);
+        bottom.add(actions, BorderLayout.SOUTH); page.add(bottom, BorderLayout.SOUTH);
+        refreshSaved(); return page;
+    }
+
+    private void refreshSaved() {
+        String selected = savedList.getSelectedValue() == null ? null : savedList.getSelectedValue().id();
+        String query = savedSearch.getText().strip().toLowerCase(Locale.ROOT);
+        List<ConnectionProfile> entries = recentOnly.isSelected() ? workspace.recent() : workspace.all().stream()
+                .sorted(Comparator.comparing(ConnectionProfile::group, String.CASE_INSENSITIVE_ORDER).thenComparing(ConnectionProfile::label, String.CASE_INSENSITIVE_ORDER)).toList();
+        savedModel.clear();
+        entries.stream().filter(p -> (p.alias() + " " + p.group() + " " + p.address() + " " + p.username()).toLowerCase(Locale.ROOT).contains(query)).forEach(savedModel::addElement);
+        savedList.getEmptyText().setText("No matching saved setups. Use Remote JMX to save one (up to 40).");
+        for (int i = 0; i < savedModel.size(); i++) if (savedModel.get(i).id().equals(selected)) savedList.setSelectedIndex(i);
+    }
+
+    private void useSaved() {
+        ConnectionProfile selected = savedList.getSelectedValue(); if (selected == null) { showMessage("Select a saved setup first.", false); return; }
+        ConnectionProfile p = workspace.find(selected.id());
+        if (p == null) { refreshSaved(); showMessage("This setup was removed in another window.", false); return; }
+        applyTarget(new Target(false, p.address(), p.username(), p.tlsRegistry(), p, p.alias(), p.lastIdentity()));
+    }
+    private void applyTarget(Target seed) {
+        url.setText(seed.address()); username.setText(seed.username()); tlsRegistry.setSelected(seed.tlsRegistry()); alias.setText(seed.alias());
+        profileId = seed.profile() == null ? null : seed.profile().id(); group.setText(seed.profile() == null ? "" : seed.profile().group());
+        password.setText(""); saveProfile.setSelected(seed.profile() != null); tabs.setSelectedIndex(1);
+    }
+    private ConnectionProfile saveSetup(boolean asNew) {
+        try {
+            ConnectionProfile p = workspace.save(asNew ? null : profileId, alias.getText(), group.getText(), url.getText(), username.getText(), tlsRegistry.isSelected());
+            profileId = p.id(); saveProfile.setSelected(true);
+            showMessage("Connection setup saved locally. Passwords are separate; no connection was started.", false); return p;
+        } catch (IllegalArgumentException e) { showMessage(e.getMessage(), true); return null; }
     }
 
     private static JPanel labeledField(String name, JComponent input) {
@@ -292,21 +410,32 @@ final class ConnectionDialog extends DialogWrapper {
     }
 
     @Override protected @Nullable ValidationInfo doValidate() {
+        if (tabs.getSelectedIndex() == 2) return savedList.getSelectedValue() == null ? new ValidationInfo("Select a saved setup, or choose Local processes / Remote JMX.", savedList) : null;
         if (tabs.getSelectedIndex() == 0) {
             if (!pid.getText().trim().matches("[1-9][0-9]*")) return new ValidationInfo("Enter a valid process ID.", pid);
         } else {
             try {
                 RemoteEndpoint.normalize(url.getText());
+                ConnectionProfile.text(alias.getText(), 80, "Alias");
+                ConnectionProfile.text(group.getText(), 80, "Group");
+                ConnectionProfile.text(username.getText(), 256, "Username");
             } catch (IllegalArgumentException e) { return new ValidationInfo(e.getMessage(), url); }
         }
         return null;
     }
 
     @Override protected void doOKAction() {
+        if (tabs.getSelectedIndex() == 2) { useSaved(); return; }
         if (doValidate() != null) { setErrorText("Check the process ID or remote address."); return; }
+        ConnectionProfile profile = tabs.getSelectedIndex() == 1 && saveProfile.isSelected() ? saveSetup(false) : null;
+        if (tabs.getSelectedIndex() == 1 && saveProfile.isSelected() && profile == null) return;
+        String normalized = tabs.getSelectedIndex() == 0 ? pid.getText().trim() : RemoteEndpoint.normalize(url.getText());
+        // Editing an endpoint makes the saved identity inapplicable; one-time entries do not inherit another target's identity.
+        JmxClient.Identity expected = profile == null ? null : profile.lastIdentity();
+        if (expected == null && initialTarget != null && initialTarget.local() == (tabs.getSelectedIndex() == 0)
+                && normalized.equals(initialTarget.address()) && (initialTarget.local() || initialTarget.username().equals(username.getText().trim()) && initialTarget.tlsRegistry() == tlsRegistry.isSelected())) expected = initialTarget.previous();
         request = new Request(tabs.getSelectedIndex() == 0,
-                tabs.getSelectedIndex() == 0 ? pid.getText().trim() : RemoteEndpoint.normalize(url.getText()),
-                allowAgent.isSelected(), username.getText().trim(), password.getPassword(), tlsRegistry.isSelected(), remember.isSelected());
+                normalized, allowAgent.isSelected(), username.getText().trim(), password.getPassword(), tlsRegistry.isSelected(), remember.isSelected(), profile, tabs.getSelectedIndex() == 0 ? "" : alias.getText().strip(), expected);
         password.setText("");
         super.doOKAction();
     }

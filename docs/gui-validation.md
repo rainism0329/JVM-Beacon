@@ -1,6 +1,23 @@
-# GUI 验证记录：0.1.2—0.7.0
+# GUI 验证记录：0.1.2—0.8.0
 
 日期：**2026-09-24**，时区 Asia/Shanghai（UTC+08:00）。这是部分真实界面流程的观察记录，**不代表全部 GUI 验收通过**。自动测试、安装包及兼容性检查另见 [验证与接续状态](validation.md)。
+
+## 0.8.0：连接工作区与显式重连
+
+Windows / IC 2025.1.3 / JBR 21 / 1388×974 / 125%。只连接本轮自有本地 fixture；PID 28900（600 秒）与 PID 13212（360 秒）的本地管理端点先用自有 jcmd 初始化，未打开远程端口。没有修改用户日常 IDEA 或既有 Ultimate 沙箱。
+
+**最终包** SHA-256 `8df29b45f53f952c604cd4905ba5c16b672f4d46b384c43b1c394fd9e09855f1`，23:48:23.991 生成。ZIP JAR 与最终加载沙箱字节一致；自动测试和 Verifier 见 validation。
+
+- Saved connections 保留此前保存的 `Development / Beacon Lab`；IDE 启动停在 STANDBY，不自动访问端点。实际本机 XML 仅含 id/alias/group/address（其余默认字段由序列化省略），没有密码字段。
+- 最终连接 PID 13212，Light 下第一次显式 Reconnect 于 23:50:06 开始新窗口，显示 Same reported JVM identity、Read-only 勾选、Auto 关闭、1/120 样本；单点可见，不再出现 Expand this panel：[最终 Light](../build/reports/ui-0.8.0/10-final-reconnect-light.png)。随后 Disconnect 显示 Stale 与原因，再 Reconnect 于 23:50:22 成功、重新 1 点。
+- 切换 Dark 后背景/字体/分隔跟随主题，Start live trend 后持续更新；23:52:04 已有 27 点，开始采样前约 50 秒空档未连线：[真实 Dark 趋势](../build/reports/ui-0.8.0/13-final-trend-dark.png)。不是长期性能测量。
+- Dark 配置搜索输入 `lab` 匹配 `Beacon Lab`，选择后详情显示规范端点、Registry TLS=true、Last success=Never；详情无固定白背景：[搜索结果](../build/reports/ui-0.8.0/11-final-saved-dark.png)。勾 Recently used 后该从未成功连接项被排除，列表为空、旧详情清除：[空结果](../build/reports/ui-0.8.0/12-final-recent-empty.png)。保存项未实际进行远程连接，不能把这些截图当作远程认证验证。
+- PID 13212 到 360 秒后正常退出（fixture exit 0），最终窗口保留 80 个历史点、停止采样并持久显示 `[CONNECTION]` 原因：[目标退出](../build/reports/ui-0.8.0/14-final-target-exit.png)。点击 Reconnect 后保持 Stale，报告 `[ATTACH]` 与 Last phase: Attach to the selected local PID：[重连失败](../build/reports/ui-0.8.0/15-final-reconnect-failure.png)，未自动重复连接或操作。
+- 最终包于 **23:48:56.790** 加载，**23:55:17.137** 正常关闭，runIde exit 0；该次启动至退出 ERROR 级日志 **0**。平台索引、预加载、station、主题 WARN 保留在 [完整本次日志](../build/reports/ide-load-0.8.0.txt)。PID 28900 与 13212 均按时限退出、exit 0，末次进程检查均不存在；用户日常 IDEA 和既有 IU 沙箱仍打开。
+
+候选过程：23:35:31.744 加载的首候选 SHA `41c9d294b9ce1d0edd03e5280798e41dcc90b2e219898430ae58234c319436cc`，294 KB 以内，Light 保存 `localhost:9010`、别名/分组并显示 Last success Never：[保存配置](../build/reports/ui-0.8.0/01-candidate-saved-light.png)。23:40:32.642 正常退出、runIde exit 0，ERROR 级日志 0：[日志](../build/reports/ide-load-0.8.0-candidate.txt)。第二候选 SHA `fe50c2fa13a31b05a1c504618c9f1aca5cc553f93f6045157123b48552ce9e42` 重启恢复列表、双击 Use setup 正确预填且未连接：[恢复](../build/reports/ui-0.8.0/02-candidate2-restored.png)、[预填](../build/reports/ui-0.8.0/03-candidate2-prefilled.png)。这两轮都发现重连时图表高度不足，最终补上紧凑图表绘制，不能将候选失败写成最终通过。
+
+未执行：保存/删除满 40 项、跨页配置并发的 GUI、远程 PasswordSafe 及 TLS GUI、同地址重启身份变化 GUI、全套旧页面、多项目与 Ultimate GUI。上述边界中有自动测试的部分也不冒充 GUI 通过。
 
 ## 0.7.0：锁等待链与固定线程比较
 

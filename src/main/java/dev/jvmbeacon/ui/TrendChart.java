@@ -54,8 +54,11 @@ final class TrendChart extends JComponent {
             int left = left(), width = plotWidth();
             int textHeight = g.getFontMetrics().getHeight(), baseline = JBUI.scale(8) + g.getFontMetrics().getAscent();
             boolean compact = getHeight() < JBUI.scale(160);
-            int top = baseline + JBUI.scale(12) + (compact ? 0 : textHeight);
-            int height = getHeight() - top - textHeight - JBUI.scale(12);
+            // A connection notice or a short tool window must not hide an otherwise usable plot.
+            // Exact times remain in the capture caption and hover when the axis cannot fit.
+            boolean tight = getHeight() < JBUI.scale(110);
+            int top = baseline + JBUI.scale(tight ? 4 : 12) + (compact ? 0 : textHeight);
+            int height = getHeight() - top - (tight ? JBUI.scale(8) : textHeight + JBUI.scale(12));
             TrendSeries series = data.get(); g.setColor(BeaconUi.MUTED);
             if (series.points().isEmpty()) { line(g, "No samples · Enable Auto or choose Sample now", left, JBUI.scale(24), width); return; }
             if (height < JBUI.scale(16)) { line(g, "Expand this panel to see the trend", left, baseline, width); return; }
@@ -88,6 +91,7 @@ final class TrendChart extends JComponent {
                 if (point != null) { int x = left + (int) (series.x(point) * width); g.setColor(BeaconUi.MUTED); g.setStroke(new BasicStroke(1)); g.drawLine(x, top, x, top + height); }
             }
             g.setColor(BeaconUi.MUTED);
+            if (tight) return;
             String start = AXIS.format(Instant.ofEpochMilli(series.from())), end = AXIS.format(Instant.ofEpochMilli(series.to()));
             int axisBaseline = top + height + JBUI.scale(6) + g.getFontMetrics().getAscent();
             if (series.from() == series.to()) {

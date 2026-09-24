@@ -19,6 +19,20 @@ class JmxClientIntegrationTest {
     @TempDir Path directory;
     private static final String BEAN = DemoApplication.BEAN_NAME;
 
+    @Test void explicitReconnectKeepsIdentityForSameJvmAndDetectsAReplacement() throws Exception {
+        JmxClient.Identity first;
+        try (FixtureProcess fixture = new FixtureProcess(true)) {
+            try (JmxClient initial = fixture.remote("observer")) { first = initial.identity(); }
+            for (int i = 0; i < 3; i++) try (JmxClient reconnected = fixture.remote("observer")) {
+                assertEquals(ConnectionIdentity.Match.SAME_REPORTED_IDENTITY, ConnectionIdentity.compare(first, reconnected.identity()));
+                assertFalse(reconnected.sample().metrics().isEmpty());
+            }
+        }
+        try (FixtureProcess replacement = new FixtureProcess(true); JmxClient connected = replacement.remote("observer")) {
+            assertEquals(ConnectionIdentity.Match.CHANGED, ConnectionIdentity.compare(first, connected.identity()));
+        }
+    }
+
     @Test void realLockChainReleaseComparisonAndOfflineReopen() throws Exception {
         try (FixtureProcess fixture = new FixtureProcess(true); JmxClient client = fixture.remote("operator")) {
             var start = operation(client, "startLockContention");

@@ -129,3 +129,10 @@
 - **本机官方发行 JDK 源码，实际读取**：Corretto 21.0.9 的 lib/src.zip 中 java.management/java/lang/management/ThreadInfo.java，getLockOwnerId 的 Javadoc 明确 -1 表示没有正在等待的对象或对象未由任何线程持有。Java 21 在线 [ThreadInfo 页面](https://docs.oracle.com/en/java/javase/21/docs/api/java.management/java/lang/management/ThreadInfo.html#getLockOwnerId()) 本次访问失败（超时/工具错误），未把该页面标成成功读取。此处依据本机附带源码注释核验 API 语义，没有搬运源码实现。
 - **本项目验证**：真实认证 loopback 子 JVM 观察到 waiter → bridge → owner 三段 ID 关系，释放后比较状态与 owner 变化；v2 重开后关系保留。用重复名称、未知 owner、缺失记录、观察环、超长路径、非法 ID 和 v1 文件做单元边界测试。具体执行结果与 GUI 独立记录在验证文档。
 - **产品判断**：先呈现选中路径与 owner 栈，比全量节点图更适合 IDEA 有限空间；这是本项目假设，不宣称已完成外部可用性研究。无新增依赖、竞品代码或视觉资源复用。
+
+## 连接配置持久化补查（2026-09-24）
+
+- **官方 SDK 文档，实际访问**：[Persisting State of Components](https://plugins.jetbrains.com/docs/intellij/persisting-state-of-components.html)，页面日期 2026-04-20。应用 service 的 PersistentStateComponent 及 XML 存储适合有结构的配置；本项目用非漫游存储，未把连接端点写入项目。当前文档不代替 251 编译/Verifier/实际重启验证。
+- **官方 SDK 文档，实际访问**：[Persisting Sensitive Data](https://plugins.jetbrains.com/docs/intellij/persisting-sensitive-data.html)，页面日期 2026-07-30。PasswordSafe get/set 可能阻塞，不能放 EDT；用户名等元数据与密码分别管理。文档还指出 2025.3 之前 Remote Development 后端存在明文存储边界；本项目实际目标仅 Windows 桌面 2025.1.3，不承诺该远程开发部署的凭据保护。
+- **官方 CLI 文档，实际访问**：[gh repo create](https://cli.github.com/manual/gh_repo_create)，核对 private/source/remote/push。用户明确指定现有账号和私有仓库后，使用现有 gh keyring 登录，创建并推送 rainism0329/JVM-Beacon；未新建令牌、公开仓库或发布 Release。CLI 查询 isPrivate=true 属实际运行证据。
+- **本项目判断**：远程命名配置、最近成功项和显式重连有望减少重复输入；没有外部用户量化研究。真实认证 JMX 重连、XML 序列化及迟到结果测试分别提供技术证据，不能据此声称所有网络拓扑或密码 GUI 均通过。

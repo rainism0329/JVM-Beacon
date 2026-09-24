@@ -1,8 +1,8 @@
 # JVM Beacon
 
-IDEA 原生的 JMX 管理与 JVM 运行时诊断工作台。当前开发版本为 **0.7.0**（2026-09-24）：核心流程无需云账号、外部 AI 或上传运行数据。本仓库尚未发布到 Marketplace；名称、plugin ID 和发布者信息仍属开发阶段。
+IDEA 原生的 JMX 管理与 JVM 运行时诊断工作台。当前开发版本为 **0.8.0**（2026-09-24）：核心流程无需云账号、外部 AI 或上传运行数据。[GitHub 源码仓库](https://github.com/rainism0329/JVM-Beacon) 为私有。本仓库尚未发布到 Marketplace；名称、plugin ID 和发布者信息仍属开发阶段。
 
-0.7.0 增加 **Lock chains + 结构化线程比较**：沿实际 owner ID 查看等待者、持锁线程及栈；固定 A/B 快照，逐项查看状态、栈与锁变化；保存 v2 现场并离线重开，兼容读取 v1。保留 0.6.1 连接/趋势修复、Hot threads、多连接标签、Value explorer、`hostname:port`、MBean 数值追踪和受控方法调用。界面保持英文和原生主题。实际验收范围见 [验证记录](docs/validation.md) 和 [GUI 记录](docs/gui-validation.md)，仍是开发预览。
+0.8.0 增加 **连接工作区**：远程配置保存、别名/分组/搜索、最近成功连接、每页显式重连与目标身份变化提示。保留 Lock chains、结构化 A/B 线程比较、v2 现场、Hot threads、多连接标签、Value explorer、`hostname:port`、MBean 数值追踪和受控方法调用。界面保持英文和原生主题。实际验收范围见 [验证记录](docs/validation.md) 和 [GUI 记录](docs/gui-validation.md)，仍是开发预览。
 
 第一次测试可按下方顺序操作：**安装 → 启动测试 JVM → 单连接流程 → 双连接标签页**。完整验收清单、预期结果和排错见 [测试指南](docs/testing.md)。文档中的待执行步骤不代表已经验收通过。
 
@@ -12,12 +12,22 @@ IDEA 原生的 JMX 管理与 JVM 运行时诊断工作台。当前开发版本�
 
 本轮开发与兼容性检查目标是 **IntelliJ IDEA Community / Ultimate 2025.1.3，IC/IU-251.26927.53，JBR 21，Windows**。Community 使用官方完整发行包；被监控测试程序使用 JDK 21。描述符允许的版本范围不等于全部版本均已实测，兼容性检查也不代替 GUI 验收。
 
-1. 在 IDEA 的 **Settings → Plugins → 齿轮 → Install Plugin from Disk…** 选择 [jvm-beacon-0.7.0.zip](build/distributions/jvm-beacon-0.7.0.zip)，按 IDE 提示重新启动；最终包验证状态见上方记录。
+1. 在 IDEA 的 **Settings → Plugins → 齿轮 → Install Plugin from Disk…** 选择 [jvm-beacon-0.8.0.zip](build/distributions/jvm-beacon-0.8.0.zip)，按 IDE 提示重新启动；最终包验证状态见上方记录。
 2. 打开项目，通过 **View → Tool Windows → JVM Beacon** 打开底部工具窗口。
 3. 点击 **Connect JVM…**，选择当前用户可见的本地 Java 进程，或输入 PID。若该进程尚未开启本地管理端点，需要明确勾选 **Allow starting the local management agent if needed**；这会改变目标进程状态。
 4. 连接成功后核对顶部的目标身份和启动时间。默认开启观察模式，自动采样关闭；可在“Telemetry”手动采样或开启每 2 秒采样。
 
 本地可见不代表可 Attach；同用户权限、目标 JVM 配置、容器和操作系统限制均可能影响连接。第一次使用建议先运行下面的独立测试程序。
+
+## 保存连接与重连
+
+在 **Connect JVM… → Remote JMX** 输入 `hostname:port`，可设置 Alias / Group。**Save setup** 只保存配置；**Save as new** 创建副本。勾选 **Save connection setup in this IDE** 时，Connect 前会先保存配置，连接失败不会成为“最近成功”。
+
+**Saved connections** 按分组/别名排列，可搜索别名、分组、端点和用户名；**Recently used** 只列出最近成功使用的最多 10 个已保存配置。选中后 **Use setup…** 返回可编辑表单，不立即连接或读取密码。保存上限 40 个；Forget setup 不关闭活动连接，也不删除 PasswordSafe 中的密码。
+
+配置保存在 IDE 本机设置 `options/jvmBeaconConnections.xml`（禁用设置漫游），含地址、用户名、别名、分组及上次成功报告的 JVM 身份；这些是普通本地元数据，不是加密凭据。密码单独使用 PasswordSafe，不进入配置、项目或 `.jvmb`。不要把密钥填入别名、地址或备注。保存配置不包含本地 PID；任意不透明 JMX stub URL 只能取消保存后一次性连接。
+
+连接后的顶部 **↻ Reconnect** 按钮重新访问本页端点；远程用户名非空时后台读取 PasswordSafe，未保存密码则返回预填表单。它会开始新的采集窗口，恢复只读并暂停采样，不重放属性写入、方法调用、通知订阅或启动管理代理的许可。相同/变化/不完整身份都有说明；这是比较目标报告的 runtime name、start time、VM name/version，不能证明服务器身份或排除 PID 复用。打开离线现场会清除该页重连入口。当前不自动重连，也不在 IDE 启动时连接。
 
 ## 用测试 JVM 走完真实流程
 

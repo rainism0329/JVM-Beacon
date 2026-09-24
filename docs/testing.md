@@ -1,10 +1,10 @@
 # 手动测试指南
 
-适用开发版本：0.7.0。建议环境：Windows、IDEA 2025.1.3、完整 JDK 21。这里只说明**怎么测试**；实际通过/失败/未测范围见 [validation.md](validation.md) 和 [gui-validation.md](gui-validation.md)。不要在未知业务进程上验证写入、方法、压力或退出。
+适用开发版本：0.8.0。建议环境：Windows、IDEA 2025.1.3、完整 JDK 21。这里只说明**怎么测试**；实际通过/失败/未测范围见 [validation.md](validation.md) 和 [gui-validation.md](gui-validation.md)。不要在未知业务进程上验证写入、方法、压力或退出。
 
 ## 准备：约 2 分钟
 
-1. 按 [README 安装步骤](../README.md#安装与开始) 安装 `build/distributions/jvm-beacon-0.7.0.zip`，重启 IDE；在 Plugins 中确认显示 0.7.0。
+1. 按 [README 安装步骤](../README.md#安装与开始) 安装 `build/distributions/jvm-beacon-0.8.0.zip`，重启 IDE；在 Plugins 中确认显示 0.8.0。
 2. 打开 **View → Tool Windows → JVM Beacon**。工具窗口太矮时向上拖顶部边缘；结果区的细分隔线也可以调整。插件自有界面应为英文。
 3. 在 PowerShell 运行以下命令，替换路径。这个终端要保持运行，看到 `PID=…` 和 `READY` 才开始连接。
 
@@ -15,6 +15,19 @@ $env:JAVA_HOME = 'C:\Users\lenovo\.jdks\corretto-21.0.9'
 ```
 
 默认模式在终端输入 `quit` 后按 Enter 正常结束；空行被忽略。若使用 `-DurationSeconds 600`，会在 10 分钟后结束，Enter 不控制退出。每次启动是独立 JVM，Counter 重新从 7 开始。该脚本没有远程监听端口；它用于 Local JVM 测试。
+
+## 连接工作区与显式重连（0.8.0）
+
+以下是可重复执行的验收步骤，实际执行范围另见验证记录。
+
+1. Connect JVM… → Remote JMX，填自己的测试端点、Alias `Beacon Lab`、Group `Development`，点 **Save setup**。无需连接就能保存；若只验证配置，可保留默认 `localhost:9010`，不点 Connect、不修改 TLS、不输入密码。Saved connections 应出现 `Development / Beacon Lab`，选择后显示规范 URL、Registry TLS、Last success: Never。
+2. 搜索 `lab` 应匹配，输入不匹配文字应显示空结果并清空详情。勾 Recently used 时，未连接成功的配置不在列表；取消过滤后恢复。选中并按 **Use setup…**，应返回预填表单，密码为空、不自动连接。
+3. 修改别名并 Save setup 应更新原项；Save as new 应增加一项。Forget setup 确认后只删除元数据，保留活动连接及 PasswordSafe 凭据。可在两个连接页同时打开编辑，验证删除/改端点后旧连接成功不恢复被删项或覆盖新端点；40 项上限与最近 10 项由自动测试覆盖。
+4. 正常退出测试 IDE 后重新启动，Saved connections 应保留配置，**不会自动连接**。元数据仅在 IDE config 的 `options/jvmBeaconConnections.xml`，项目文件中没有密码或连接配置；PasswordSafe 单独管理凭据。
+5. 启动本地 fixture，只连接它打印的 PID。先开始 Auto · 2 s，待趋势有多个点，点击顶部 **↻ Reconnect**。应显示 RECONNECTED / Same reported JVM identity，Read-only 勾选、Auto 关闭、趋势从一个新点开始。再执行 Disconnect → Reconnect，重复三次；不应增加标签页、订阅或后台采样，UI 仍可响应。
+6. 本地重连不沿用启动管理代理的许可。如果目标端点不可用，需要重新打开 Local processes 表单，由操作者决定是否再次允许。fixture 退出后点击 Reconnect 应显示失败阶段且保持 Stale，不能显示 LIVE。打开离线现场后重连按钮禁用，不能误连该文件的 PID。
+7. 远程认证目标测试时，按现有认证/TLS 步骤连接自己的 loopback fixture。记住密码后显式重连应后台读取 PasswordSafe；无已存密码应返回预填表单。用户名/端点是凭据作用域；改动后不能沿用原密码。超时写操作不会被重连重放。
+8. 关闭并重启自己的远程 fixture、复用测试端点，显式连接应报告 TARGET CHANGED；没有完整身份时应报告 IDENTITY UNVERIFIED。这不代表已认证服务器身份。此同端点重启的 GUI 场景尚未实测；自动集成实测相同子 JVM 重连与另一个子 JVM 的身份差异。
 
 ## 锁链与结构化线程比较（0.7.0）
 
