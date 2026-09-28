@@ -94,6 +94,16 @@ final class JfrStacksPanel extends JPanel {
     void load(JfrStacks.Data next, JfrStacks.View initial) {
         generation++; data = next; kind.setSelectedItem(JfrStacks.Kind.JAVA); populateThreads(); show(initial);
     }
+    JfrStacks.Kind activeKind() { return view == null ? JfrStacks.Kind.JAVA : view.kind(); }
+    JfrStacks.SampledThread activeThread() { return view == null ? null : view.thread(); }
+    void loadScoped(JfrStacks.Data next, JfrStacks.View initial) {
+        generation++; data = next; kind.setSelectedItem(initial.kind()); populateThreads();
+        if (initial.thread() != null) {
+            if (!next.threads(initial.kind()).contains(initial.thread())) threads.addItem(initial.thread());
+            threads.setSelectedItem(initial.thread());
+        }
+        show(initial);
+    }
     void setBusy(boolean busy) { this.busy = busy; updateActions(); }
     private void populateThreads() {
         threads.removeAllItems(); threads.addItem("All retained sampled threads");
@@ -116,7 +126,7 @@ final class JfrStacksPanel extends JPanel {
         summary.setText(next.kind().event + " · " + next.root().inclusive() + " represented samples · Roots at top · Width ≠ CPU time");
         summary.setToolTipText("Displayed thread filter: " + (next.thread() == null ? "All retained sampled threads" : next.thread())
                 + "; window: " + next.first() + " → " + next.last() + ". Change selectors then Apply filters.");
-        losses.setText((next.partialScan() ? "PARTIAL scan" : "End of file") + " · Event-wide missing: " + next.counts().missing()
+        losses.setText((next.partialScan() ? "PARTIAL scan" : "End of file") + " · Scoped missing: " + next.counts().missing()
                 + " / omitted: " + next.counts().omitted() + " / truncated: " + next.counts().truncated() + " · Tree omissions: " + next.omitted() + " · See Coverage");
         select(next.root()); updateActions();
         status.accept("Local JFR sampled stacks ready · " + next.root().inclusive() + " represented samples. Coverage lists the active filters and limits.");

@@ -186,3 +186,11 @@
 - 补查 [JDK21u VirtualThread.java](https://raw.githubusercontent.com/openjdk/jdk21u/master/src/java.base/share/classes/java/lang/VirtualThread.java) 的 parkNanos/yield 路径，全文未发现 ThreadParkEvent 名称；仅作实现线索，不从单文件检索断言所有路径或更新版本均缺少该事件。上述源码按 GPLv2 核对协议/行为，没有搬运实现。
 
 差异化假设是从等待热点直接回到单次事件与源代码候选，减少丢失上下文；尚未做正式效率研究。选择保守事件证据优先于不可靠的自动锁图/死锁结论。原始计数、版本与失败过程见 validation。
+
+## 0.14.0：时间区间语义（查询 2026-09-28）
+
+- 官方 API / JDK 21：[RecordedEvent](https://docs.oracle.com/en/java/javase/21/docs/api/jdk.jfr/jdk/jfr/consumer/RecordedEvent.html) 分别给出 start/end/duration；瞬时事件 start=end。由此实现精确时点与持续事件的不同筛选，不修改事件字段。半开区间与正相交是本产品设计选择，不能声称为所有分析工具的统一规则。
+- 官方 API / JDK 21：[RecordingFile](https://docs.oracle.com/en/java/javase/21/docs/api/jdk.jfr/jdk/jfr/consumer/RecordingFile.html) 支持逐事件读取并 Closeable 释放资源；readAllEvents 不面向大型文件。继续逐条读取、有限复制，不把整个 JDK 对象图读入 UI。所读 API 文档没有给本实现提供可依赖的全文件时间排序保证，因此不按时间提前退出。
+- 实现与测试证据：独立双阶段 fixture 逐个原始事件核对区间库存、分配权重、GC 与等待；测试中加入纳秒边界、空范围、部分扫描、文件变化、取消和迟到响应。实际数字/GUI 范围见 validation，不从一个文件外推所有 JDK/负载。
+
+产品判断：先把已有视图围绕一次卡顿联动，比增加无共同时间上下文的新图更有价值；效率收益尚属待用户验证的假设。无竞品代码或资源复用，无新增外部依赖。

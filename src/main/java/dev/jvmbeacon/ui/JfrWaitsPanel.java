@@ -18,12 +18,17 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.List;
 import java.util.function.Consumer;
+import java.util.function.BiConsumer;
+import java.time.Instant;
 
 /** Filtering runs on LOCAL_IO; tables contain immutable local evidence and update in one batch. */
 final class JfrWaitsPanel extends JPanel {
     private final JfrPanel.Jobs jobs;
     private final Consumer<JfrStacks.Frame> navigate;
     private final Consumer<String> status;
+    private final BiConsumer<Instant, Instant> focusEvent;
+    private JfrWaits.Kind activeKind;
+    private String activeQuery = "";
     private final JComboBox<Object> kind = new JComboBox<>(new Object[]{"All event kinds", JfrWaits.Kind.ENTER, JfrWaits.Kind.WAIT, JfrWaits.Kind.PARK});
     private final JBTextField search = new JBTextField();
     private final JButton apply = new JButton("Apply filters"), drill = new JButton("Show hotspot events"), reset = new JButton("All filtered events");
@@ -40,7 +45,10 @@ final class JfrWaitsPanel extends JPanel {
     private boolean busy; private long generation;
 
     JfrWaitsPanel(JfrPanel.Jobs jobs, Consumer<JfrStacks.Frame> navigate, Consumer<String> status) {
-        super(new BorderLayout(JBUI.scale(6), JBUI.scale(6))); this.jobs = jobs; this.navigate = navigate; this.status = status;
+        this(jobs, navigate, status, (start, end) -> { });
+    }
+    JfrWaitsPanel(JfrPanel.Jobs jobs, Consumer<JfrStacks.Frame> navigate, Consumer<String> status, BiConsumer<Instant, Instant> focusEvent) {
+        super(new BorderLayout(JBUI.scale(6), JBUI.scale(6))); this.jobs = jobs; this.navigate = navigate; this.status = status; this.focusEvent = focusEvent;
         kind.setRenderer(new DefaultListCellRenderer() { { putClientProperty("html.disable", true); } });
         kind.getAccessibleContext().setAccessibleName("Wait event kind filter");
         search.setPreferredSize(JBUI.size(280, 28)); search.getEmptyText().setText("Thread / class / recorded method…");
@@ -55,8 +63,8 @@ final class JfrWaitsPanel extends JPanel {
             table.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "beacon.inspectWait");
             table.getActionMap().put("beacon.inspectWait", new AbstractAction() { public void actionPerformed(ActionEvent e) { if (table == hotTable) drill(); else inspect(); } });
         }
-        columnWidths(hotTable, 115, 220, 290, 80, 120, 120);
-        columnWidths(eventTable, 115, 260, 230, 120, 230);
+        columnWidths(hotTable, 140, 220, 265, 80, 120, 120);
+        columnWidths(eventTable, 140, 250, 215, 120, 230);
         hotTable.getTableHeader().setToolTipText("Sum / Max: completed event durations in milliseconds. Sums can overlap across threads; they are not CPU time.");
         tabs.addTab("Wait hotspots", BeaconUi.scroll(hotTable)); tabs.addTab("Events", BeaconUi.scroll(eventTable));
         tabs.addTab("Coverage", BeaconUi.scroll(coverage)); tabs.addChangeListener(e -> actions()); add(tabs, BorderLayout.CENTER);
@@ -71,10 +79,17 @@ final class JfrWaitsPanel extends JPanel {
     }
     void clear() {
         generation++; data = null; view = null; events = List.of(); hotModel.replace(List.of()); eventModel.replace(List.of());
+        activeKind = null; activeQuery = "";
         search.setText(""); kind.setSelectedIndex(0); coverage.setText("No local recording inspected.");
         summary.setText("Open a local .jfr to inspect recorded waits"); actions();
     }
     void load(JfrWaits.Data data, JfrWaits.View initial) { clear(); this.data = data; show(initial); }
+    JfrWaits.Kind activeKind() { return activeKind; }
+    String activeQuery() { return activeQuery; }
+    void loadScoped(JfrWaits.Data data, JfrWaits.View initial, JfrWaits.Kind selectedKind, String query) {
+        load(data, initial); activeKind = selectedKind; activeQuery = query;
+        kind.setSelectedItem(selectedKind == null ? "All event kinds" : selectedKind); search.setText(query);
+    }
     void setBusy(boolean busy) { this.busy = busy; actions(); }
     private void actions() {
         apply.setEnabled(data != null && !busy); kind.setEnabled(!busy); search.setEnabled(!busy);
@@ -86,7 +101,7 @@ final class JfrWaitsPanel extends JPanel {
         var current = data; long expected = generation; var filterKind = kind.getSelectedItem() instanceof JfrWaits.Kind k ? k : null;
         String query = search.getText();
         jobs.run("Filter retained JFR waits", false, 8_000, () -> JfrWaits.filter(current, filterKind, query),
-                result -> { if (generation == expected) show(result); }, error -> { if (generation == expected) status.accept(error + " · Previous wait report retained."); });
+                result -> { if (generation == expected) { activeKind = filterKind; activeQuery = query; show(result); } }, error -> { if (generation == expected) status.accept(error + " · Previous wait report retained."); });
     }
     private void show(JfrWaits.View next) {
         view = next;
@@ -124,7 +139,8 @@ final class JfrWaitsPanel extends JPanel {
     }
     private void inspect() {
         var event = selectedEvent(); if (event == null) return;
-        new EventDialog(event, navigate, view.text()).show();
+        long expected = generation;
+        new EventDialog(event, navigate, view.text(), (start, end) -> { if (generation == expected && !busy) focusEvent.accept(start, end); }).show();
     }
     private static BigDecimal ms(BigInteger nanos) { return new BigDecimal(nanos, 6); }
     private static void columnWidths(JBTable table, int... widths) {
@@ -140,8 +156,9 @@ final class JfrWaitsPanel extends JPanel {
     }
     private static final class EventDialog extends DialogWrapper {
         private final JfrWaits.Event event; private final Consumer<JfrStacks.Frame> navigate; private final String report;
-        EventDialog(JfrWaits.Event event, Consumer<JfrStacks.Frame> navigate, String report) {
-            super(true); this.event = event; this.navigate = navigate; this.report = report; setTitle("JFR wait event · " + event.kind().label); setOKButtonText("Close"); init();
+        private final BiConsumer<Instant, Instant> focusEvent;
+        EventDialog(JfrWaits.Event event, Consumer<JfrStacks.Frame> navigate, String report, BiConsumer<Instant, Instant> focusEvent) {
+            super(true); this.event = event; this.navigate = navigate; this.report = report; this.focusEvent = focusEvent; setTitle("JFR wait event · " + event.kind().label); setOKButtonText("Close"); init();
         }
         @Override protected Action[] createActions() { return new Action[]{getOKAction()}; }
         @Override protected JComponent createCenterPanel() {
@@ -162,7 +179,9 @@ final class JfrWaitsPanel extends JPanel {
             copy.addActionListener(e -> CopyPasteManager.getInstance().setContents(new StringSelection(event.evidence()
                     + event.stack().stream().map(f -> f.label() + " " + f.descriptor()).collect(java.util.stream.Collectors.joining("\n")) + "\n\n" + report)));
             panel.add(BeaconUi.split(true, "jfr-wait-event", BeaconUi.scroll(evidence), BeaconUi.scroll(stack), .48f), BorderLayout.CENTER);
-            panel.add(BeaconUi.row(BeaconUi.label("Recorded stack · leaf first", true), source, copy), BorderLayout.SOUTH);
+            JButton focus = new JButton("Focus event ±100 ms");
+            focus.addActionListener(e -> { close(OK_EXIT_CODE); focusEvent.accept(event.start(), event.end()); });
+            panel.add(BeaconUi.row(BeaconUi.label("Recorded stack · leaf first", true), source, copy, focus), BorderLayout.SOUTH);
             BeaconUi.applyTypography(panel); return panel;
         }
     }

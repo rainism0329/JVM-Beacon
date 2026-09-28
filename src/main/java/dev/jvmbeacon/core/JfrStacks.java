@@ -24,8 +24,10 @@ public final class JfrStacks {
         public Sample { leafFirst = List.copyOf(leafFirst); }
     }
     public record Counts(long observed, long missing, long omitted, long truncated) { }
-    public record Data(List<Sample> samples, Map<Kind, Counts> counts, boolean partialScan) {
+    public record Data(List<Sample> samples, Map<Kind, Counts> counts, boolean partialScan, String scope) {
         public Data { samples = List.copyOf(samples); counts = Map.copyOf(counts); }
+        public Data(List<Sample> samples, Map<Kind, Counts> counts, boolean partialScan) { this(samples, counts, partialScan, ""); }
+        Data withScope(String scope) { return new Data(samples, counts, partialScan, scope); }
         public List<SampledThread> threads(Kind kind) {
             return samples.stream().filter(s -> s.kind == kind).map(Sample::thread).distinct()
                     .sorted(Comparator.comparing(SampledThread::name).thenComparingLong(SampledThread::recordedId)).toList();
@@ -132,7 +134,7 @@ public final class JfrStacks {
             if (last == null || sample.time.isAfter(last)) last = sample.time;
         }
         Counts counts = data.counts.getOrDefault(kind, new Counts(0, 0, 0, 0));
-        String text = "JFR / SAMPLED STACKS\nEvent: " + kind.event + "\nThread filter: " + (thread == null ? "All retained sampled threads" : thread)
+        String text = data.scope + "\n\nJFR / SAMPLED STACKS\nEvent: " + kind.event + "\nThread filter: " + (thread == null ? "All retained sampled threads" : thread)
                 + "\nInspected samples of this event kind: " + counts.observed + " · Missing/empty stacks: " + counts.missing
                 + " · Omitted by retention/metadata limits: " + counts.omitted
                 + "\nTruncated stacks retained (before thread filter): " + counts.truncated

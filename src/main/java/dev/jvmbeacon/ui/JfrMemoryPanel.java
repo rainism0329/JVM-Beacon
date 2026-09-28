@@ -19,10 +19,12 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.math.BigInteger;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.function.Consumer;
+import java.util.function.BiConsumer;
 
 /** Pure local views of already copied data; no remote requests or file access. */
 final class JfrMemoryPanel extends JPanel {
@@ -37,16 +39,24 @@ final class JfrMemoryPanel extends JPanel {
     private final JTextArea detail = BeaconUi.text("Select an event or class to read exact evidence.", 2);
     private final JTextArea coverage = BeaconUi.text("No local recording inspected.", 12);
     private final JButton copy = new JButton("Copy selected evidence"), copyCoverage = new JButton("Copy coverage");
+    private final JButton focus = new JButton("Focus event ±100 ms");
     private final JBTabbedPane tabs = new JBTabbedPane();
     private final GcTimeline timeline = new GcTimeline(this::selectEvent);
     private JfrMemory.Data data;
+    private JfrMemory.Gc selectedGc;
+    private boolean busy;
 
     JfrMemoryPanel() {
+        this((start, end) -> { });
+    }
+    JfrMemoryPanel(BiConsumer<Instant, Instant> focusEvent) {
         super(new BorderLayout(JBUI.scale(6), JBUI.scale(6)));
         JPanel top = BeaconUi.panel(2); top.add(summary, BorderLayout.NORTH);
         search.getEmptyText().setText("Filter by class, GC name, cause or ID");
         search.setPreferredSize(JBUI.size(300, 28)); search.getAccessibleContext().setAccessibleName("Filter GC and allocation tables");
-        top.add(BeaconUi.row(BeaconUi.label("Search", true), search, copy, copyCoverage), BorderLayout.CENTER); add(top, BorderLayout.NORTH);
+        top.add(BeaconUi.row(BeaconUi.label("Search", true), search, copy, copyCoverage, focus), BorderLayout.CENTER); add(top, BorderLayout.NORTH);
+        focus.addActionListener(e -> { if (!busy && selectedGc != null) focusEvent.accept(selectedGc.start(), selectedGc.end()); });
+        focus.setToolTipText("Apply this event plus up to 100 ms on either side to all JFR views. Full event durations remain intact.");
         BeaconUi.table(gcTable, "No retained GC events. Events may be disabled, unsupported or absent.");
         BeaconUi.table(allocationTable, "No retained allocation samples. This does not mean zero allocations.");
         gcTable.setRowSorter(gcSorter); allocationTable.setRowSorter(allocationSorter);
@@ -72,7 +82,9 @@ final class JfrMemoryPanel extends JPanel {
             }
         });
         JPanel gc = BeaconUi.panel(4);
-        gc.add(BeaconUi.split(true, "jfr-memory-gc", timeline, BeaconUi.scroll(gcTable), .28f), BorderLayout.CENTER);
+        JComponent gcSplit = BeaconUi.split(true, "jfr-memory-gc", timeline, BeaconUi.scroll(gcTable), .28f);
+        timeline.setMinimumSize(JBUI.size(140, 64));
+        gc.add(gcSplit, BorderLayout.CENTER);
         tabs.addTab("GC timeline", gc); tabs.addTab("Allocation pressure", BeaconUi.scroll(allocationTable));
         tabs.addTab("Coverage", BeaconUi.scroll(coverage)); add(tabs, BorderLayout.CENTER);
         detail.putClientProperty("beacon.mono", true); detail.setBorder(JBUI.Borders.empty(4, 8)); add(BeaconUi.scroll(detail), BorderLayout.SOUTH);
@@ -103,6 +115,8 @@ final class JfrMemoryPanel extends JPanel {
                 + (next.partial() ? "PARTIAL scan" : "End of file") + " · Check Coverage for omissions");
         summary.setToolTipText("Inspected event window: " + next.first() + " → " + next.last()); filter();
     }
+    void loadScoped(JfrMemory.Data next) { String query = search.getText(); load(next); search.setText(query); }
+    void setBusy(boolean busy) { this.busy = busy; focus.setEnabled(!busy && selectedGc != null); }
     private void filter() {
         String text = search.getText().strip();
         RowFilter<DefaultTableModel, Integer> filter = text.isEmpty() ? null : RowFilter.regexFilter("(?i)" + java.util.regex.Pattern.quote(text));
@@ -134,6 +148,7 @@ final class JfrMemoryPanel extends JPanel {
                     + "\nWeight: " + a.weight() + " bytes · Share of ALL retained weight: " + (data.totalWeight().signum() == 0 ? "Not available (zero total)" : String.format(Locale.ROOT, "%.3f%%", a.weight().doubleValue() / data.totalWeight().doubleValue() * 100))
                     + "\nSample window: " + a.first() + " → " + a.last() + " · Statistical allocation pressure, NOT exact/live bytes.";
         }
+        selectedGc = selected; focus.setEnabled(!busy && selected != null);
         timeline.selected = selected; timeline.repaint(); copy.setEnabled(text != null);
         detail.setText(text == null ? "Select an event or class to read exact evidence. Search does not change the allocation share denominator." : text); detail.setCaretPosition(0);
     }
@@ -168,7 +183,7 @@ final class JfrMemoryPanel extends JPanel {
             for (int i = hits.size() - 1; i >= 0; i--) if (hits.get(i).box().contains(e.getPoint())) {
                 var event = hits.get(i).event(); return event.kind() + " · GC #" + event.id() + " · " + event.nanos() + " ns · " + event.name();
             }
-            return "Inspected file event window. Marks are at least 2 px; overlapping events can hide each other. Use the table for exact values.";
+            return "Marks are clipped to the applied range and at least 2 px. Overlapping events can hide each other. Table durations remain whole-event values.";
         }
         @Override protected void paintComponent(Graphics graphics) {
             super.paintComponent(graphics); hits.clear(); Graphics2D g = (Graphics2D) graphics.create();
@@ -176,12 +191,13 @@ final class JfrMemoryPanel extends JPanel {
                 g.setColor(BeaconUi.CANVAS); g.fillRect(0, 0, getWidth(), getHeight());
                 g.setFont(BeaconUi.font()); int left = JBUI.scale(95), width = Math.max(1, getWidth() - left - JBUI.scale(18));
                 g.setColor(BeaconUi.MUTED); g.drawString("GC cycles", JBUI.scale(8), JBUI.scale(35)); g.drawString("GC pauses", JBUI.scale(8), JBUI.scale(57));
-                if (data == null || data.first() == null) { g.drawString("No inspected event window", left, JBUI.scale(23)); return; }
-                double span = seconds(data.first(), data.last());
-                g.drawString("Inspected window · " + data.first() + " → " + data.last(), JBUI.scale(8), JBUI.scale(17));
+                if (data == null || data.first() == null && data.range() == null) { g.drawString("No inspected event window", left, JBUI.scale(23)); return; }
+                Instant first = data.range() == null ? data.first() : data.range().from(), last = data.range() == null ? data.last() : data.range().until();
+                double span = seconds(first, last);
+                g.drawString((data.range() == null ? "Inspected window · " : "Applied range · ") + first + " → " + last, JBUI.scale(8), JBUI.scale(17));
                 for (var event : events) {
-                    double from = span <= 0 ? .5 : Math.clamp(seconds(data.first(), event.start()) / span, 0, 1);
-                    double to = span <= 0 ? .5 : Math.clamp(seconds(data.first(), event.end()) / span, 0, 1);
+                    double from = span <= 0 ? .5 : Math.clamp(seconds(first, event.start()) / span, 0, 1);
+                    double to = span <= 0 ? .5 : Math.clamp(seconds(first, event.end()) / span, 0, 1);
                     int x = left + (int) (from * width), end = left + (int) (to * width);
                     Rectangle box = new Rectangle(Math.min(x, left + width - 2), JBUI.scale(event.kind() == JfrMemory.Kind.CYCLE ? 24 : 46), Math.max(2, end - x), JBUI.scale(12));
                     g.setColor(event.kind() == JfrMemory.Kind.CYCLE ? CYCLE : BeaconUi.ACCENT); g.fill(box);

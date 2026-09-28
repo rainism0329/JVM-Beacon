@@ -39,6 +39,7 @@ public final class JfrWaits {
     public record Counts(long observed, long invalid, long omitted, long missingStacks, long omittedStacks, long truncatedStacks) { }
     public record Data(List<Event> events, Map<Kind, Counts> counts, boolean partial, String text) {
         public Data { events = List.copyOf(events); counts = Map.copyOf(counts); }
+        Data withScope(String scope) { return new Data(events, counts, partial, scope + "\n\n" + text); }
     }
     public record Key(Kind kind, Target target, JfrStacks.Frame leaf) { }
     public record Hotspot(Key key, List<Event> events, BigInteger totalNanos, long maxNanos) {

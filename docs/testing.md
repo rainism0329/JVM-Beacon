@@ -1,10 +1,10 @@
 # 手动测试指南
 
-适用开发版本：0.13.0。建议环境：Windows、IDEA 2025.1.3、完整 JDK 21。这里只说明**怎么测试**；实际通过/失败/未测范围见 [validation.md](validation.md) 和 [gui-validation.md](gui-validation.md)。不要在未知业务进程上验证写入、方法、压力或退出。
+适用开发版本：0.14.0。建议环境：Windows、IDEA 2025.1.3、完整 JDK 21。这里只说明**怎么测试**；实际通过/失败/未测范围见 [validation.md](validation.md) 和 [gui-validation.md](gui-validation.md)。不要在未知业务进程上验证写入、方法、压力或退出。
 
 ## 准备：约 2 分钟
 
-1. 按 [README 安装步骤](../README.md#安装与开始) 安装 `build/distributions/jvm-beacon-0.13.0.zip`，重启 IDE；在 Plugins 中确认显示 0.13.0。
+1. 按 [README 安装步骤](../README.md#安装与开始) 安装 `build/distributions/jvm-beacon-0.14.0.zip`，重启 IDE；在 Plugins 中确认显示 0.14.0。
 2. 打开 **View → Tool Windows → JVM Beacon**。工具窗口太矮时向上拖顶部边缘；结果区的细分隔线也可以调整。插件自有界面应为英文。
 3. 在 PowerShell 运行以下命令，替换路径。这个终端要保持运行，看到 `PID=…` 和 `READY` 才开始连接。
 
@@ -228,3 +228,14 @@ $env:JAVA_HOME = 'C:\Users\lenovo\.jdks\corretto-21.0.9'
 7. 在 Light/Dark 和 125% 缩放检查热点表、事件详情弹窗、键盘下钻、无选择/空栈/source 按钮状态。表格的精确小数单位是 ms，弹窗保留原纳秒值。
 
 预算：等待事件共 4096 条、64 帧/栈、65536 帧引用、4096 不同帧，事件元数据和栈符号各 1 Mi 字符；名称/描述符各 512 字符。达到栈预算时保留事件并显式标注栈遗漏。未实现时间范围选择、按锁实例聚合、park 原因诊断或 VirtualThreadPinned 分析。
+
+## 全局 JFR 时间区间验收（0.14.0）
+
+使用 README 的 capture-range-demo 脚本输出，不能对业务进程制造负载。
+
+1. 打开 range.jfr，记录 FULL 事件数、GC/分配权重、采样数与等待数。Time range 选中一段合法区间，所有页与复制报告必须带相同 UTC 范围；不能出现页间新旧范围混合。
+2. 从 GC 或 Inspect wait event 执行 Focus event ±100 ms，切换视图核对范围；持续事件保留完整时长，不要求它小于所选区间。GC 标记可以裁剪，详情不可改写。
+3. 先应用等待 kind/query、采样 kind/thread、内存搜索，再改全局范围：已应用条件保留，原选择与缩放清除。Full recording 恢复原统计；分配搜索不能改变当前区间的份额分母。
+4. Range 对话框输入负数、反向区间、相等起止、超窗结束、超过 9 位小数，确认拒绝且旧范围不变；合法零起点和纳秒精度应接受。
+5. 仅在自有录制副本上验证：加载后由外部改动该副本，再应用范围，应失败并保留全部旧结果/Update failed，重新 Open 才使用新文件。应用中关闭页/换文件，不得被迟到响应恢复旧内容。
+6. 检查 Light/Dark、125%、键盘操作、GC 及等待详情按钮；小窗口可使用原生滚动/调列宽。不同 JDK/更多缩放、最大录制、8 页/长时间运行另行验收，不由本清单推断通过。

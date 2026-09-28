@@ -1,6 +1,18 @@
-# GUI 验证记录：0.1.2—0.13.0
+# GUI 验证记录：0.1.2—0.14.0
 
 最近日期：**2026-09-28**，时区 Asia/Shanghai（UTC+08:00）。这是部分真实界面流程的观察记录，**不代表全部 GUI 验收通过**。自动测试、安装包及兼容性检查另见 [验证与接续状态](validation.md)。
+
+## 0.14.0：统一时间区间与事件聚焦
+
+最终包 **16:41:42** 构建，**16:42:28.311—16:47:09.116** 在独立官方 IC 2025.1.3 / JBR 21 / Windows 运行；1388×974、125%。ZIP 内与实际加载 JAR 哈希一致，runIde exit 0、会话 ERROR 0，详情见 validation。以下均来自布局修正后的最终包；分析全程未连接业务目标。
+
+- 从原生文件选择器打开自有双阶段 range.jfr，[FULL](../build/reports/ui-0.14.0/full.png) 为 321/321 events、133,076 bytes、EOF。[Time range 对话框](../build/reports/ui-0.14.0/dialog.png)使用 UTC 起点和相对秒数；键盘 Tab 切换输入。应用 B 阶段 `[0.5902413, 0.98413470)` 后，[库存](../build/reports/ui-0.14.0/range.png)为 196/321，allocation 171、ExecutionSample 13、GC 两类各 2。
+- 切[采样栈](../build/reports/ui-0.14.0/stacks.png)为 13 represented samples；切 [GC](../build/reports/ui-0.14.0/memory.png)为 4 events / 17 allocation classes，顶部 RANGE 一致。双轨标签完整，表格可见两行并可滚动；不是全部小窗口验收。
+- [选 GC #4](../build/reports/ui-0.14.0/gc-select.png)读到 426,200 ns；按 Focus event ±100 ms 后范围为 `[08:29:32.503833200Z, 08:29:32.704259400Z)`，[结果](../build/reports/ui-0.14.0/gc-focus.png)为 106/321、2 GC events，选择清除、表内完整时长仍 0.426 ms。Full recording [恢复](../build/reports/ui-0.14.0/restored-memory.png)321/321、10 GC events / 18 classes。
+- [完整等待页](../build/reports/ui-0.14.0/waits-full.png)13 events / 5 hotspots。All filtered events 后双击 main 的 Monitor entry，[详情](../build/reports/ui-0.14.0/wait-event.png)为 120,518,100 ns、历史 previousOwner=beacon-range-owner、两帧原栈。Focus 后[视图](../build/reports/ui-0.14.0/wait-focus.png)为 16/321、5 waits；原 Monitor entry 仍为 120.518100 ms。[Coverage](../build/reports/ui-0.14.0/coverage.png)显示相同 UTC `[08:29:32.124861800Z, 08:29:32.445379900Z)`、完整时长语义及计数。
+- 切原生 [Light](../build/reports/ui-0.14.0/light.png)，颜色/字体随主题更新。重新编辑 From=-1 后 Apply 被拒绝，[原生错误提示](../build/reports/ui-0.14.0/invalid-range.png)可见且旧范围保留；Cancel 后 Full recording [恢复 321/321 与 13 waits](../build/reports/ui-0.14.0/restored.png)。展开 [capture controls](../build/reports/ui-0.14.0/capture-controls.png)仍能读未连接状态，没有隐式启动录制。
+
+前一候选工具栏挤压 GC 标签与表格，最终版已合并操作区并给时间线设置最小高度；截图只保存最终包。当前尺寸仍需滚动长表、深栈和长报告。未逐项 GUI 复测：所有非法输入、B 范围等待/分配详情、已应用筛选保留、外部改文件、迟到响应、空/坏文件、复制回读、源码导航、远程录制按钮、IU GUI、长时/极限文件；其中若干由核心/组件测试覆盖，不能称为 GUI 通过。仅关闭本项目自有沙箱。
 
 ## 0.13.0：等待热点、事件与源码
 

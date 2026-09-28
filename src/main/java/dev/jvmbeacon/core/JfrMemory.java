@@ -18,8 +18,11 @@ public final class JfrMemory {
     public record Counts(long observed, long invalid, long omitted) { }
     public record Data(List<Gc> gc, List<Allocation> allocations, Counts cycles, Counts pauses,
                        Counts samples, BigInteger totalWeight, Instant first, Instant last,
-                       boolean partial, String text) {
+                       boolean partial, String text, JfrTimeRange range) {
         public Data { gc = List.copyOf(gc); allocations = List.copyOf(allocations); }
+        public Data(List<Gc> gc, List<Allocation> allocations, Counts cycles, Counts pauses, Counts samples, BigInteger totalWeight,
+                    Instant first, Instant last, boolean partial, String text) { this(gc, allocations, cycles, pauses, samples, totalWeight, first, last, partial, text, null); }
+        Data withScope(String scope, JfrTimeRange range) { return new Data(gc, allocations, cycles, pauses, samples, totalWeight, first, last, partial, scope + "\n\n" + text, range); }
     }
     static final class Builder {
         private final List<Gc> gc = new ArrayList<>();
