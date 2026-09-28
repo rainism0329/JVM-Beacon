@@ -163,6 +163,10 @@ public final class SessionRunner implements AutoCloseable {
         if (chain.stream().anyMatch(e -> e instanceof javax.management.MBeanException
                 || e instanceof javax.management.RuntimeMBeanException || e instanceof javax.management.RuntimeErrorException))
             help = "[TARGET] The MBean returned an exception. Check its constraints and server logs. The request may have had partial effects; it will not be retried automatically.";
+        else if (chain.stream().anyMatch(e -> e instanceof dev.jvmbeacon.core.JfrCapture.TransferLimitException))
+            help = "[LIMIT] The JFR stream was empty, returned an invalid block, or exceeded 64 MiB. No completed file was saved. The recording is retained; use a shorter capture or another analysis tool.";
+        else if (chain.stream().anyMatch(e -> e instanceof java.nio.file.FileSystemException))
+            help = "[FILE] Local file access failed. Choose a writable directory and a new file name. JFR downloads never replace existing files; the connection is retained.";
         else if (lane == Lane.LOCAL_IO && chain.stream().anyMatch(e -> e instanceof SecurityException))
             help = "[PERMISSION] Local file or credential access was denied. Check user permissions and unlock the credential store if needed.";
         else if (lane == Lane.LOCAL_IO && chain.stream().anyMatch(e -> e instanceof java.io.IOException))

@@ -145,3 +145,13 @@
 - [GarbageCollectorMXBean.getCollectionTime](https://docs.oracle.com/en/java/javase/21/docs/api/java.management/java/lang/management/GarbageCollectorMXBean.html#getCollectionTime())：近似累计采集经过时间，单位 ms，未知为 -1；即使次数增加，时间也可能因精度保持不变。插件现有采集按 collector 求和。因此曲线保留累计意义，不把其差值声称为暂停总时长、暂停百分比或根因。计数回退可能来自重置/collector 变化，仅作不确定性说明。
 
 产品判断（推断，待用户验证）：四轨共享采集窗口和检查游标能减少反复切换单指标的步骤；区间保留可帮助复盘实际看到的变化。它不代替 JFR 的事件级证据，也不保证更高诊断准确率。
+
+## JFR：2026-09-28 补查
+
+证据类型为官方 API/产品文档，适用 JDK 21；没有复用实现代码或竞品资源。使用 JDK 已提供的 API，不引入 JMC 二进制依赖，不暗示其许可证适用于本项目发布。
+
+- [FlightRecorderMXBean](https://docs.oracle.com/en/java/javase/21/docs/api/jdk.management.jfr/jdk/management/jfr/FlightRecorderMXBean.html)：先配置 duration/maxAge/disk/maxSize，再启动；远程 copyTo 写目标文件，故选 stopped recording 的 openStream/readStream/closeStream 下载。并行录制可能影响所采事件；权限由服务端决定。客户端取消不是服务端停止的证据。
+- [RecordingInfo](https://docs.oracle.com/en/java/javase/21/docs/api/jdk.management.jfr/jdk/management/jfr/RecordingInfo.html)：duration/maxAge 为秒，开始/停止时间为 epoch ms。初次实测因误当毫秒失败，修正后验证 5 秒自动停止。
+- [Oracle JDK Mission Control](https://www.oracle.com/java/technologies/jdk-mission-control.html)：专业 JFR 分析入口。此轮核验产品定位，不宣称实测 JMC GUI。种子 `https://docs.oracle.com/en/java/javase/21/jfapi/flight-recorder.html` 抓取失败，未将其作为已读依据。
+
+项目判断：先提供可控录制和可带走的证据，再开发采样栈视图。可排序/搜索的事件库存有助于快速确认实际采到了哪些事件，不能替代专业分析。价值仍待外部用户验证。实际自有 JVM / GUI 证据分别见 validation 和 gui-validation，不由官方声明推导本插件已通过。

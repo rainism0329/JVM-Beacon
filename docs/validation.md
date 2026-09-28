@@ -1,8 +1,29 @@
-# 0.9.0 验证与接续状态
+# 0.10.0 验证与接续状态
 
 日期：2026-09-28，Windows 11 x64。这是**功能开发预览**，完成了下列具体场景，尚未完成全部验收或整个产品愿景。历史记录按版本保留，不由旧构建外推新包通过。
 
-## 0.9.0 当前验证
+## 0.10.0 当前验证
+
+新增自有 JFR 录制的创建/限时自动停止/提前停止/下载/释放，以及离线事件库存表、搜索排序和详细报告。未实现调用树/火焰图，也未将 JMC 当作内置引擎；后续路线见 decisions。
+
+最终包 [jvm-beacon-0.10.0.zip](../build/distributions/jvm-beacon-0.10.0.zip)：**2026-09-28 12:17:26 +08:00，341,885 bytes**，SHA-256 `274ecd937767def4146ef7053d4ce5822108a111532530cc4afa6b9bc4990cb7`。ZIP 仅含插件 JAR，与最终 IC 沙箱加载 JAR 相同（`bce4f5217434c8d85f88ac4c4cd37d11ab952c04273c0d0b19ddb5b64e16a2a9`）。[产物核对](../build/reports/release-checks-0.10.0.json)。
+
+| 检查 | 本轮实际结果与边界 |
+|---|---|
+| 构建与测试 | 最终源码 `test buildPlugin verifyPlugin` exit 0；**104/104，0 失败/错误/跳过**。[完整日志](../build/reports/checks-0.10.0.txt) |
+| 新增 JFR 核心 | 3 个单测：能力缺失、迟到创建取消后不启动且清 ID、配置失败不重试且清理；4 个真实认证 loopback 集成：5 s 自动停止/流下载/RecordingFile 解析/部分扫描/禁止覆盖、observer 拒绝启动、三轮提前停止/关闭不影响独立 recording、超限与取消流清理 |
+| 故障证据范围 | 传输上限模拟无尽 64 KiB 块，第 1025 次读取拒绝；迟到块取消后拒绝提交，二者均关闭 stream 且无 partial/成品残留。使用真实自有服务端及客户端返回注入，不是实际 WAN 测试 |
+| 既有回归 | JMX/类型/结构值/通知/断连/双目标/TLS/时间线/现场/线程/会话上限等既有 97 项通过。JFR 经远程认证 loopback 验证，未单独做 JFR-over-TLS 压力或慢网矩阵 |
+| 独立演示 | `capture-jfr-demo.ps1` exit 0 / JFR_CAPTURE_PASS；自有 PID 2160、operator，5 s 自动停止、374,683 bytes，生成 [证据](../build/examples/jfr-20260928-120351-630/evidence.txt) 和 .jfr/库存。释放 recording、finally 关闭子 JVM |
+| 官方兼容 | Verifier 1.408 对最终 ZIP 的 IC/IU-251.26927.53 均 Compatible。保留已有 SslRMIClientSocketFactory 规则提示和 IDE layout warnings；未屏蔽警告，也不扩展声明到其他 IDE/JDK/OS |
+| 最终 GUI | IC 2025.1.3 / JBR 21 / Windows，1388×974，125%。自有 PID 7984 的 30 s 录制、目标自动 STOPPED、下载 310,703 bytes/3,891 events；过滤 Sample 与计数排序；断连后 jcmd 只读确认 No available recordings；无连接重开相同文件，事件数/时间保持；Dark、Light。详见 [按包 GUI 记录](gui-validation.md) |
+| 正常退出 | 最终包 12:18:25.984 加载，12:24:04.222 正常退出，runIde exit 0；本次启动至退出 ERROR 级日志 0，保留平台 WARN。[日志](../build/reports/ide-load-0.10.0.txt)。自有定时 fixture PID 8336/7984 均已到时退出；未关闭用户日常 IDE |
+
+实际修正：最初 JFR 测试将 RecordingInfo duration 误作毫秒，官方 API 和实测均为秒，已修正并通过；脚本初次在受限 shell 下 javac 报无法关闭编译器资源，升级到授权的本机权限后成功。GUI 首候选为长文本摘要，第二候选事件表可见行过少；最终压缩重复状态/工具栏，以搜索排序表为主、完整说明放详情。候选观察没有被冒充为最终包通过。
+
+未验证：生产 WAN/RMI 故障、JFR-over-TLS 压力、其他目标 JDK/OS、Ultimate GUI、8 连接并发录制、长时 IDEA/JFR 开销、动态卸载、完整键盘/屏幕阅读器/缩放矩阵、JMC GUI。32 MiB/64 MiB/时限是设计预算，不是性能测量结果；JDK 单次本地解析和底层 RMI 不保证立即取消。断线不能保证目标数据已释放；文件不自动脱敏。
+
+## 0.9.0 历史验证
 
 新增多指标时间线、共享检查游标、冻结区间及端点比较、v3 历史现场保存/重开。使用既有采样器；指标不是健康分或根因判断。下一阶段为有界 JFR，再补 Run/Debug 关联与网络/IDE 验收矩阵。
 
@@ -256,4 +277,4 @@ $env:JAVA_HOME = 'C:\Users\lenovo\.jdks\corretto-21.0.9'
 
 继续重复连接/断开矩阵、通知压力与永久阻塞请求下关闭、附加/匿名候选源码、更多主题/缩放、完整键盘和远程认证/PasswordSafe 界面验证。产品开发优先运行配置关联、复杂结果树/表与追踪使用体验验证。完成范围以 [GUI 记录](gui-validation.md) 为准，不沿用旧包通过结论。
 
-随后补双向 TLS、证书主机名、WAN/RMI 第二端口、大 MBean/通知压力、长时资源及 IDEA/JDK/OS 矩阵。显示上限不能限制 RMI 反序列化巨大对象，当前只连接可信目标。SSH、Jolokia、JFR、虚拟线程采集、运行配置关联和跨重启恢复留在 [路线](decisions.md)，没有用占位按钮伪装完成。
+随后补双向 TLS、证书主机名、WAN/RMI 第二端口、大 MBean/通知压力、长时资源及 IDEA/JDK/OS 矩阵。显示上限不能限制 RMI 反序列化巨大对象，当前只连接可信目标。SSH、Jolokia、JFR 深入分析、虚拟线程采集、运行配置关联和跨重启恢复留在 [路线](decisions.md)，没有用占位按钮伪装完成。

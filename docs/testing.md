@@ -165,3 +165,27 @@ $env:JAVA_HOME = 'C:\Users\lenovo\.jdks\corretto-21.0.9'
 ```
 
 约 15 秒，自有认证 loopback fixture 以 observer 读取 8 次，其中主动等 6 秒制造空档；保留原始读值，未人为伪造数据。输出 `TIMELINE_CAPTURE_PASS` 和新时间戳目录，其中 `timeline.jvmb` 为 8 点、`interval.jvmb` 为第 3–6 点、`evidence.txt` 为窗口和大小。finally 清理连接和子 JVM。不测试用户业务进程、不修改权限/TLS、不启用 CPU/争用监控。文件上限 5 MiB、采样上限 120、GC 近似累计值和平台线程边界不变。
+
+## Flight Recorder（0.10.0）
+
+实际通过项见 validation/gui-validation；以下是可重复的验收步骤，不表示所有 GUI 负向项均已跑过。
+
+1. 运行默认 `scripts/run-fixture.ps1`，连接输出 PID，进入 Flight Recorder。Read-only 开启时 Record/Stop/Release 禁用；Check / refresh 只探测能力，Corretto 21 应报告 default/profile。检查动作失败时显示权限/连接原因，不把失败当不支持。
+2. 取消 Read-only，Record 使用 default、30 秒。取消对话框不得启动；确认时应看到目标、开销、隐私和退出清理政策。启动后显示 recording ID、实际检查时刻、目标报告状态和开始/预计停止时间。RecordingInfo duration 是秒。
+3. 不点击 Stop，过 30 秒 Refresh 应报告 STOPPED；按钮不靠本地计时伪造成功。也可重建一个录制后确认 Stop 提前结束。上一个录制未释放前不得再 Record。
+4. Download 选择新的 `.jfr` 路径。下载完成后 Event inventory 显示事件名/计数，默认计数降序；搜索 `Sample` 或 `Thread` 只过滤已有行，计数不变，不追加采集。点击列标题排序。Inventory details 给出实际事件范围、扫描完整/部分标记及预算。
+5. 下载至已经存在的文件名应拒绝，不覆盖旧文件；本地文件系统错误保持连接。网络中断、超时或 Stop waiting 则可能断开并请求清理；不自动重试未知结果，迟到响应不更新新会话。单次远程调用无法保证被中断。
+6. Release 确认丢弃目标端 recording，但不删除已经下载的文件。再 Refresh 应为 READY。仅管理本连接拥有的 ID；独立测试创建的另一个 recording 在重复连接/清理后仍在。
+7. 断开后 Open local .jfr 重开刚才文件，搜索排序仍可用、远程操作禁用。复制文件路径，另行安装 JMC 后手动 File → Open File 做深入分析；本轮并未替用户安装 JMC。损坏/超过 64 MiB 文件应失败且不修改原文件。
+
+快速独立验证：
+
+```powershell
+.\scripts\capture-jfr-demo.ps1 -JdkHome 'C:\Users\lenovo\.jdks\corretto-21.0.9'
+```
+
+预计约 10 秒（冷启动可能更久），输出 `JFR_CAPTURE_PASS`。生成目录含 capture.jfr、inventory.txt 和目标/时刻/大小证据。使用自有认证 loopback 子 JVM、operator 账号，5 秒后自动停止并释放录制、finally 退出进程。
+
+自动用例 `JfrCaptureTest` / `JfrIntegrationTest` 包括：无 MXBean、只读拒绝、输入时限校验、录制中拒绝下载、自动停止、提前停止、真实文件可读、扫描截断、禁止覆盖、三轮连接清理不影响其他 ID、创建迟到不启动、配置失败不重试、64 MiB 流上限和读取迟到取消后关闭流/移除 partial。传输异常用真实自有目标加客户端流返回注入验证，不冒充真实 WAN 故障。
+
+预算是保护措施而不是性能测量：每连接最多一录制；32 MiB 为目标 repository retention，可能按 chunk 超出且不涵盖总开销；64 MiB 为客户端下载硬字节上限；45 s 为块间时间检查，60 s 是界面等待截止；本地 JDK 解析至多检查 200k events/256 types/5 s，不保证单次解析可立即中断。更广 JDK、慢 WAN、JFR 压力/长时开销和虚拟线程事件覆盖仍待测。

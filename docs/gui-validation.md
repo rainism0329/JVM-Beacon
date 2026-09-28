@@ -1,6 +1,21 @@
-# GUI 验证记录：0.1.2—0.9.0
+# GUI 验证记录：0.1.2—0.10.0
 
 最近日期：**2026-09-28**，时区 Asia/Shanghai（UTC+08:00）。这是部分真实界面流程的观察记录，**不代表全部 GUI 验收通过**。自动测试、安装包及兼容性检查另见 [验证与接续状态](validation.md)。
+
+## 0.10.0：Flight Recorder 与本地事件库存
+
+2026-09-28，Windows / IC-251.26927.53 / JBR 21 / 1388×974 / 125%。最终 ZIP 为 **12:17:26** 生成，SHA-256 `274ecd937767def4146ef7053d4ce5822108a111532530cc4afa6b9bc4990cb7`；最终沙箱 JAR 与 ZIP 内相同，核对见 validation。
+
+- 最终包 **12:18:25.984** 加载。启动最长 300 秒的自有本地 fixture **PID 7984**，启动时间 **12:18:10.843**，使用自有 `jcmd 7984 ManagementAgent.start_local` 初始化本地端点，没有远程端口。GUI 选择准确 PID，Read-only 默认开启，Check / refresh 报告 default/profile；随后显式关闭只读并打开 [录制确认](../build/reports/ui-0.10.0/01-confirm.png)。确认包含目标、时限、资源、隐私和断连清理说明。
+- 默认 30 秒，目标报告 #1 RUNNING，开始 **04:20:13.164Z**、预计停止 **04:20:43.164Z**：[运行中](../build/reports/ui-0.10.0/02-running.png)。等待后 Refresh 报告 STOPPED，实际停止 **04:20:43.188Z**、310,703 bytes：[自动停止](../build/reports/ui-0.10.0/03-stopped.png)。没有依靠 UI 倒计时伪造状态。
+- GUI Download 保存 `build/examples/jfr-20260928-120351-630/release-gui-0.10.0.jfr`，310,703 bytes，解析到 EOF 的 **3,891 events**：[事件表](../build/reports/ui-0.10.0/04-inventory-dark.png)。搜索 Sample 得到 NativeMethodSample=956、ObjectAllocationSample=15、ExecutionSample=1：[过滤](../build/reports/ui-0.10.0/05-filter.png)。点击计数列变升序 1/15/956：[排序](../build/reports/ui-0.10.0/06-sort.png)。没有改变文件或采集事件。
+- GUI Disconnect 后远程按钮禁用、说明清理可能失败：[断开](../build/reports/ui-0.10.0/07-disconnect.png)。随即通过同 JDK `jcmd 7984 JFR.check` 只读查询为 **No available recordings**。再 GUI Open local .jfr 打开该文件，无连接仍显示 3,891 events/310,703 bytes：[重开](../build/reports/ui-0.10.0/08-reopened.png)。详细事件窗口 **04:20:13.184760500Z → 04:20:43.200966800Z**，与 recording 管理时刻分开：[详情](../build/reports/ui-0.10.0/09-details.png)。
+- Dark 下表格/文字无固定白分隔；切换 Light 后详情可读：[Light](../build/reports/ui-0.10.0/10-light.png)。只观察本次尺寸和 125%，不外推其他缩放或窄窗口。
+- **12:24:04.222** 通过正常 Exit 关闭最终沙箱，runIde exit 0；该次加载至退出 ERROR 级日志 0，平台 WARN 保留。PID 7984 到 300 秒自动退出，较早自有 PID 8336 到 600 秒退出，均 exit 0。未关闭用户日常 IDEA。
+
+候选说明：12:05 首候选用长文本展示摘要，GUI 提前停止得到 313,360 bytes/3,611 events；12:12 事件表候选得到 295,866 bytes/3,852 events，但可见行过少。随后压缩状态区和工具栏，最终包使用上面的新 PID/新文件重新走通自动停止、下载、筛选、排序和离线重开。候选的提前 Stop GUI 不外推为最终包重测；提前停止的最终核心测试通过。
+
+未实操：最终包 Release 确认按钮、GUI 权限/超时/无匹配矩阵、JFR-over-TLS、Ultimate GUI、8 页/跨项目录制、全部缩放/键盘/可访问性、JMC GUI、动态卸载和长时开销。创建失败/取消/传输上限/他人 recording 隔离有自动测试，不能代替未测 GUI 场景。
 
 ## 0.9.0：多指标时间线与可保存区间
 

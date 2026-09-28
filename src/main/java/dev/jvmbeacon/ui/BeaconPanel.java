@@ -56,6 +56,7 @@ public final class BeaconPanel extends JPanel implements Disposable {
     private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS").withZone(ZoneId.systemDefault());
     private final Project project;
     private final SessionRunner runner = new SessionRunner();
+    private final JfrPanel jfr;
     private Connected session;
     private JmxClient client;
     private JmxClient.Identity identity;
@@ -160,6 +161,7 @@ public final class BeaconPanel extends JPanel implements Disposable {
     public BeaconPanel(Project project) {
         super(new BorderLayout());
         this.project = project;
+        jfr = new JfrPanel(project, this::backgroundWithDeadline, this::status);
         liveActions.add(timelineLive);
         timelineLive.addActionListener(e -> {
             autoSample.setSelected(!autoSample.isSelected()); updateSamplingTimer();
@@ -207,6 +209,7 @@ public final class BeaconPanel extends JPanel implements Disposable {
         pages.addTab("Threads", threadsPage());
         pages.addTab("Snapshots", snapshotPage());
         pages.addTab("Timeline", timeline);
+        pages.addTab("Flight Recorder", jfr);
         add(pages, BorderLayout.CENTER);
         status.setRows(2); status.setLineWrap(true); status.setWrapStyleWord(true);
         status.setBackground(BeaconUi.SURFACE); status.setForeground(BeaconUi.MUTED);
@@ -234,7 +237,7 @@ public final class BeaconPanel extends JPanel implements Disposable {
             status(pending ? "Stopped waiting and disconnected. The target may still be executing the request. Mutation outcome is unknown; check the target before taking further action." : "Disconnected. Displayed data is stale. Reconnecting starts a new sampling window.");
         });
         observe.setToolTipText("Client-side guard only. Server authorization still applies; reads may have overhead or side effects.");
-        observe.addActionListener(e -> status(observe.isSelected() ? "Read-only mode is a client-side guard, not server authorization. Reads may still have overhead or side effects." : "Writes and invocations are available. Each request still requires confirmation of its target and parameters."));
+        observe.addActionListener(e -> { updateActions(); status(observe.isSelected() ? "Read-only mode is a client-side guard, not server authorization. Reads may still have overhead or side effects." : "Writes and invocations are available. Each request still requires confirmation of its target and parameters."); });
         timer = new javax.swing.Timer(2000, e -> {
             if (client != null && !runner.isBusy() && isShowing()) {
                 if (watching) pollWatch(); else if (autoSample.isSelected()) sampleNow(false);
@@ -770,7 +773,7 @@ public final class BeaconPanel extends JPanel implements Disposable {
                              boolean truncated, JmxClient.Sample sample, BeaconExecutors.ConnectionLease lease,
                              AtomicReference<char[]> credentialsToSave) implements BeaconExecutors.ManagedConnection {
         char[] takeCredentials() { return credentialsToSave.getAndSet(new char[0]); }
-        @Override public void close() { Arrays.fill(takeCredentials(), '\0'); lease.close(); }
+        @Override public void close() { client.jfr().cancel(); Arrays.fill(takeCredentials(), '\0'); lease.close(); }
     }
 
     private static boolean persistCredentials(CredentialAttributes key, String username, char[] secret) {
@@ -790,8 +793,12 @@ public final class BeaconPanel extends JPanel implements Disposable {
     }
 
     private <T> void background(String label, boolean network, Callable<T> work, Consumer<T> success) {
+        backgroundWithDeadline(label, network, 8_000, work, success, ignored -> {});
+    }
+
+    private <T> void backgroundWithDeadline(String label, boolean network, long deadline, Callable<T> work, Consumer<T> success, Consumer<String> failure) {
         if (disposed) return;
-        if (!runner.submit(network ? SessionRunner.Lane.NETWORK : SessionRunner.Lane.LOCAL_IO, label, work, value -> {
+        if (!runner.submit(network ? SessionRunner.Lane.NETWORK : SessionRunner.Lane.LOCAL_IO, label, deadline, work, value -> {
             if (disposed) return;
             success.accept(value); updateActions();
             drainPendingBean();
@@ -804,7 +811,7 @@ public final class BeaconPanel extends JPanel implements Disposable {
                 autoSample.setSelected(false); watching = false; watchGeneration++; updateSamplingTimer(); renderWatch();
                 connectionProblem = error + " Connection retained; automatic sampling paused. Resume manually when workers become available.";
             }
-            status(error); updateActions(); drainPendingBean();
+            failure.accept(error); status(error); updateActions(); drainPendingBean();
         })) status("A request is already running. Wait for it to finish, or disconnect to stop waiting. Requests are neither queued nor overlapped.");
         else status(label + "…");
         updateActions();
@@ -1203,6 +1210,7 @@ public final class BeaconPanel extends JPanel implements Disposable {
 
     private void updateActions() {
         boolean live = client != null;
+        jfr.setSession(client, runner.isBusy(), observe.isSelected());
         hotThreads.setConnectionState(live, runner.isBusy());
         pinThreads.setEnabled(identity != null && dump != null && !runner.isBusy());
         compareThreads.setEnabled(threadBaseline != null && dump != null && !runner.isBusy());

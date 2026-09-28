@@ -60,6 +60,7 @@ public final class JmxClient implements AutoCloseable {
 
     private final JMXConnector connector;
     private final MBeanServerConnection server;
+    private final JfrCapture jfr;
     private final Identity identity;
     private final Map<String, NotificationListener> listeners = new ConcurrentHashMap<>();
     private final ArrayDeque<NotificationEvent> events = new ArrayDeque<>();
@@ -69,6 +70,7 @@ public final class JmxClient implements AutoCloseable {
     private JmxClient(JMXConnector connector) throws Exception {
         this.connector = connector;
         this.server = connector.getMBeanServerConnection();
+        this.jfr = new JfrCapture(server);
         ObjectName runtime = new ObjectName(ManagementFactory.RUNTIME_MXBEAN_NAME);
         this.identity = new Identity((String) server.getAttribute(runtime, "Name"),
                 ((Number) server.getAttribute(runtime, "StartTime")).longValue(),
@@ -165,6 +167,7 @@ public final class JmxClient implements AutoCloseable {
     }
 
     public Identity identity() { return identity; }
+    public JfrCapture jfr() { return jfr; }
 
     public List<String> queryNames() throws Exception {
         ensureOpen();
@@ -399,7 +402,8 @@ public final class JmxClient implements AutoCloseable {
         if (closed.compareAndSet(false, true)) {
             listeners.clear();
             synchronized (events) { events.clear(); }
-            connector.close();
+            try { jfr.close(); }
+            finally { connector.close(); }
         }
     }
 }

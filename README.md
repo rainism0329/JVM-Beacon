@@ -1,8 +1,8 @@
 # JVM Beacon
 
-IDEA 原生的 JMX 管理与 JVM 运行时诊断工作台。当前开发版本为 **0.9.0**（2026-09-28）：核心流程无需云账号、外部 AI 或上传运行数据。[GitHub 源码仓库](https://github.com/rainism0329/JVM-Beacon) 为私有。本仓库尚未发布到 Marketplace；名称、plugin ID 和发布者信息仍属开发阶段。
+IDEA 原生的 JMX 管理与 JVM 运行时诊断工作台。当前开发版本为 **0.10.0**（2026-09-28）：核心流程无需云账号、外部 AI 或上传运行数据。[GitHub 源码仓库](https://github.com/rainism0329/JVM-Beacon) 为私有。本仓库尚未发布到 Marketplace；名称、plugin ID 和发布者信息仍属开发阶段。
 
-0.9.0 增加 **Signal timeline**：CPU、heap、GC、平台线程共享时间轴与检查游标；冻结视图、选择稳定区间、比较端点、保存并离线重开。`.jvmb` v3 可保存最多 120 个已有指标样本，兼容读取 v1/v2。保留连接工作区、Lock chains、A/B 线程比较、Hot threads、多连接标签、Value explorer、`hostname:port`、MBean 数值追踪和受控方法调用。界面保持英文和原生主题。实际验收范围见 [验证记录](docs/validation.md) 和 [GUI 记录](docs/gui-validation.md)，仍是开发预览。
+0.10.0 增加 **Flight Recorder**：本地/远程 JMX 能力检查、5–120 秒有界 JFR 录制、提前停止、下载 `.jfr`、离线事件表与搜索排序。保留 Signal timeline、采集区间保存、连接工作区、锁链/线程比较、Hot threads、多连接标签、复杂值浏览、`hostname:port` 和受控 MBean 方法调用。界面保持英文和原生主题。实际验收范围见 [验证记录](docs/validation.md) 和 [GUI 记录](docs/gui-validation.md)，仍是开发预览。
 
 第一次测试可按下方顺序操作：**安装 → 启动测试 JVM → 单连接流程 → 双连接标签页**。完整验收清单、预期结果和排错见 [测试指南](docs/testing.md)。文档中的待执行步骤不代表已经验收通过。
 
@@ -12,7 +12,7 @@ IDEA 原生的 JMX 管理与 JVM 运行时诊断工作台。当前开发版本�
 
 本轮开发与兼容性检查目标是 **IntelliJ IDEA Community / Ultimate 2025.1.3，IC/IU-251.26927.53，JBR 21，Windows**。Community 使用官方完整发行包；被监控测试程序使用 JDK 21。描述符允许的版本范围不等于全部版本均已实测，兼容性检查也不代替 GUI 验收。
 
-1. 在 IDEA 的 **Settings → Plugins → 齿轮 → Install Plugin from Disk…** 选择 [jvm-beacon-0.9.0.zip](build/distributions/jvm-beacon-0.9.0.zip)，按 IDE 提示重新启动；最终包验证状态见上方记录。
+1. 在 IDEA 的 **Settings → Plugins → 齿轮 → Install Plugin from Disk…** 选择 [jvm-beacon-0.10.0.zip](build/distributions/jvm-beacon-0.10.0.zip)，按 IDE 提示重新启动；最终包验证状态见上方记录。
 2. 打开项目，通过 **View → Tool Windows → JVM Beacon** 打开底部工具窗口。
 3. 点击 **Connect JVM…**，选择当前用户可见的本地 Java 进程，或输入 PID。若该进程尚未开启本地管理端点，需要明确勾选 **Allow starting the local management agent if needed**；这会改变目标进程状态。
 4. 连接成功后核对顶部的目标身份和启动时间。默认开启观察模式，自动采样关闭；可在“Telemetry”手动采样或开启每 2 秒采样。
@@ -156,7 +156,7 @@ v3 现场格式保存目标标识、最多 120 个保留的指标样本、一份
 - 本地 Attach、远程 JMX/RMI；连接身份、失败阶段提示及手动重连。暂不支持运行配置自动关联、SSH、Jolokia 或容器自动发现。
 - ObjectName 搜索与应用级收藏；属性读取、复杂值文本/结构树/顶层表格、严格类型校验后的写入和精确签名操作调用。编辑支持基础标量、常用数值类型、`ObjectName`、基础类型数组和 `String[]`；不反射构造任意目标对象。
 - 选中 MBean 时读取其可读属性，并对展示数量和文本设上限；这些展示限制不能限制 RMI 接收巨大对象时的反序列化开销，当前仅连接可信目标。
-- 实际指标与最多 120 点趋势，2 秒可选采样，无请求重叠；超过 5 秒的采样间隔不连接折线。暂不提供健康分、自动根因判断或 JFR 分析。
+- 实际指标与最多 120 点趋势，2 秒可选采样，无请求重叠；超过 5 秒的采样间隔不连接折线。JFR 当前提供录制和事件库存，不提供健康分、自动根因判断或采样调用树/火焰图。
 - ThreadMXBean 平台线程快照、名称/ID/状态筛选：最多 512 条线程、每栈最多 64 帧，明确标识截断。现场线程比较只处理已采集范围，最多显示 200 条差异。缺失不等于零，栈未变化不等于持续阻塞；不覆盖虚拟线程。源码和运行字节码版本的一致性仍需用户确认。
 - `.jvmb` 现场保存、离线重开与文本比较；文件上限 5 MiB。指标与线程可能在不同时间采集，不是原子快照，也不能恢复未采集历史。
 - 每个视图最多一个在途任务；连接截止时间 20 秒，普通请求 8 秒。取消或超时不保证底层 Attach/RMI 已停止；迟到结果丢弃，修改结果可能未知。全局网络/Attach 池最多 4 个线程，本地文件与 PasswordSafe I/O 池最多 2 个线程，均无任务队列且彼此隔离；网络池耗尽不会占用离线任务的执行名额。16 个连接许可覆盖连接中、活动和关闭阶段，每个已接纳连接预留清理容量。
@@ -191,3 +191,21 @@ $beaconIde = 'D:\IdeaProjects\JVM-Beacon\.intellijPlatform\ides\community-2025.1
 自动化测试仅连接自己启动且会清理的 fixture JVM；认证远程 fixture 仅监听 loopback。`verifyPlugin`、插件加载和交互验收的实际成功、失败与未验证项集中记录在 [docs/validation.md](docs/validation.md)。
 
 开发入口：[AGENTS.md](AGENTS.md) · [调研与证据](docs/research.md) · [产品/工程决策及路线](docs/decisions.md) · [验证与接续状态](docs/validation.md)。
+
+## JFR 录制与本地事件库存（0.10.0）
+
+1. 连接本轮测试 JVM，进入 **Flight Recorder → Check / refresh**。发现 `default, profile` 后，取消顶部 Read-only，点击 **Record…**。确认目标、预设和 5–120 秒时限；默认 30 秒。录制会消耗目标 CPU、内存和磁盘。
+2. 可点 **Stop…** 提前停止，或等时限后点 **Check / refresh**。只有目标报告 STOPPED 才允许 **Download .jfr…**。状态标有检查时间，不自动轮询，不把本地倒计时当远程事实。
+3. 选择新的本地文件名。下载上限 64 MiB / 循环预算 45 秒，IDE 最多等待 60 秒；不覆盖已有文件。下载后显示可搜索/排序的事件表，**Inventory details** 保留时间范围、来源及截断说明。事件数不等于耗时、CPU 百分比或所有活动。
+4. **Release…** 关闭本页自有录制并丢弃目标端保留数据。断连、换目标或关闭页也会请求清理，网络失败时不能保证已释放；目标端时限仍限制录制时长，但保留数据可能需要管理员清理。不会接管或关闭其他工具创建的录制。
+5. 无连接时仍可 **Open local .jfr…**。深入分析可用 **Copy file path**，在另行安装的 JDK Mission Control 中 File → Open File 打开。插件不自动安装/启动外部软件；目前没有调用树、火焰图或自动诊断。
+
+`.jfr` 不并入 `.jvmb`，不会自动脱敏，可能含参数、属性、路径、线程/栈及应用数据。只打开可信来源文件；本地解析限制为 64 MiB、200,000 事件、256 个命名类型、5 秒扫描预算，JDK 单次解析可能超出这个软时间预算。32 MiB 目标保留设置不是总内存/磁盘或开销硬上限。当前实测目标为 Corretto 21.0.9；目标没有 JFR MXBean 时显示 UNAVAILABLE。
+
+无需 IDE 的真实复现：
+
+```powershell
+.\scripts\capture-jfr-demo.ps1 -JdkHome 'C:\Users\lenovo\.jdks\corretto-21.0.9'
+```
+
+成功输出 `JFR_CAPTURE_PASS`，时间戳目录内有 `capture.jfr`、`inventory.txt`、`evidence.txt`；脚本启动自有认证 loopback JVM、录制 5 秒、下载、重读并清理，不连接业务进程。完整负向用例和预期结果见 [测试指南](docs/testing.md)。
