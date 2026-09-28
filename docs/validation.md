@@ -1,8 +1,31 @@
-# 0.11.0 验证与接续状态
+# 0.12.0 验证与接续状态
 
 日期：2026-09-28，Windows 11 x64。这是**功能开发预览**，完成了下列具体场景，尚未完成全部验收或整个产品愿景。历史记录按版本保留，不由旧构建外推新包通过。
 
-## 0.11.0 当前验证
+## 0.12.0 当前验证
+
+交付 JFR GC 双轨时间线、可搜索/排序事件表、纳秒详情、分配样本按类汇总与权重占比、复制证据/覆盖报告。没有把周期时长当暂停，也没有把权重当存活堆或泄漏判断。全部插件自有 UI 继续使用英文。
+
+最终 [jvm-beacon-0.12.0.zip](../build/distributions/jvm-beacon-0.12.0.zip)：**2026-09-28 14:44:36 +08:00，408,113 bytes**；SHA-256 `88615af27dff744178ff9eea45f59fd6bd98e23a9351d30093ce0b7c0aaba1cf`。包内 JAR 与实际 IC 加载 JAR 均为 `84984b1ec65d6261054f395b183cedf5361d60b34a08f85677f3bd5c17e56f35`。[核对记录](../build/reports/release-checks-0.12.0.json)。未发布 Release/Marketplace。
+
+| 检查 | 实际结果与边界 |
+|---|---|
+| 完整构建与自动测试 | 最终代码 `test buildPlugin verifyPlugin` exit 0，**119 项，0 失败/错误/跳过**。[日志](../build/reports/checks-0.12.0.txt) |
+| 新增测试 | 4 个核心测试：真实 GC/暂停字段和 allocation 原始总量核对、独立子 JVM、错误单位/负数/大整数相加、GC/类预算及已有类继续累加、空/部分证据；2 个 UI 测试：搜索不改分母、清空与复制按钮状态、排序/缺失与真实零区分 |
+| 兼容性 | Plugin Verifier 1.408：IC/IU **251.26927.53 均 Compatible**。保留既有 SslRMIClientSocketFactory JDK 8 规则 deprecated 提示与 IDE layout 警告；真实 JDK 21 TLS 回归通过，不外推更多版本 |
+| 实际 IDE | 最终 IC/JBR 21/Windows 包 **14:45:26.505** 加载、**14:52:41.318** 退出，runIde exit 0，此会话 ERROR 级日志 **0**。[日志](../build/reports/ide-load-0.12.0.txt)。UIThemeBean 等平台 WARN 保留 |
+| GUI | 1388×974 / 125% / Light、Dark；GC 标记定位表行、精确详情、分配权重/搜索后份额、无匹配、无相关事件、坏文件错误/清空，均使用真实文件。[GUI 记录](gui-validation.md) |
+| 演示脚本 | `capture-memory-demo.ps1` exit 0，MEMORY_RECORDING_PASS；自有 Corretto 21.0.9 / SerialGC / 64 MiB JVM 退出。文件 **118,545 bytes / 460 events**、EOF；16 cycles、16 pauses、422 allocation samples、7 classes，无无效/遗漏。[原证据](../build/reports/memory-evidence-0.12.0.txt)，[文件](../build/examples/memory-20260928-143740-611/memory.jfr) |
+
+实际样本权重总量 **289,785,360 bytes**；`[B` 412 samples / 286,851,704 weight；String 3 samples / 710,312 weight，GUI 显示 0.245%，过滤后分母保持不变。这些是统计权重，不与 fixture 的精确应用分配量作等值断言。录制还包含 6 个自定义异常测试事件，库存显示它们，但内存分析严格排除。
+
+失败与修正：首个 GUI 候选的时间线/详情把 GC 表格挤没；修成原生可调细分隔、紧凑双轨与可滚动详情后，重跑全部 119 测试、构建、Verifier 和上述最终 GUI。最终窗口可直接看到约 2 个 GC 表行，更多行滚动；不声称任意小窗口都有同等空间。测试指南顶部旧 0.8.0 安装指引已同步到当前包。
+
+资源边界：没有新网络任务/池/定时器，仍由 LOCAL_IO 扫描并给 UI 不可变结果；额外最多 4096 GC 事件/2048 类/每名称 512 字符，同次文件扫描沿用 64 MiB、200k events、5 s 软检查。预算不是测量结果；本轮未做最大文件/8 标签/长时间采集的峰值内存或完整 IDE 性能验收。
+
+未验证/未实现：更多收集器/JDK、IU 实际 GUI、WAN、全无障碍和窄窗口矩阵、全部剪贴板/排序 GUI 组合；本轮没有重新逐个点击旧远程录制按钮。没有 allocation stack/线程归因、GC 堆前后关联、区间筛选或泄漏分析。下一阶段优先 JFR 锁等待事件分析，其后统一时间范围与 Run/Debug 关联，详见 decisions。
+
+## 0.11.0 历史验证
 
 交付本地 JFR sampled-stack 分析：按 Java/native event kind 分开，线程筛选、调用树、可缩放火焰图、高亮和源码候选；有缺失/截断/保留预算说明。不是完整 profiler，也不是 CPU 耗时百分比。README/testing 有复测步骤，下一阶段见 decisions。
 

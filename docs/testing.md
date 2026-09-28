@@ -1,10 +1,10 @@
 # 手动测试指南
 
-适用开发版本：0.8.0。建议环境：Windows、IDEA 2025.1.3、完整 JDK 21。这里只说明**怎么测试**；实际通过/失败/未测范围见 [validation.md](validation.md) 和 [gui-validation.md](gui-validation.md)。不要在未知业务进程上验证写入、方法、压力或退出。
+适用开发版本：0.12.0。建议环境：Windows、IDEA 2025.1.3、完整 JDK 21。这里只说明**怎么测试**；实际通过/失败/未测范围见 [validation.md](validation.md) 和 [gui-validation.md](gui-validation.md)。不要在未知业务进程上验证写入、方法、压力或退出。
 
 ## 准备：约 2 分钟
 
-1. 按 [README 安装步骤](../README.md#安装与开始) 安装 `build/distributions/jvm-beacon-0.8.0.zip`，重启 IDE；在 Plugins 中确认显示 0.8.0。
+1. 按 [README 安装步骤](../README.md#安装与开始) 安装 `build/distributions/jvm-beacon-0.12.0.zip`，重启 IDE；在 Plugins 中确认显示 0.12.0。
 2. 打开 **View → Tool Windows → JVM Beacon**。工具窗口太矮时向上拖顶部边缘；结果区的细分隔线也可以调整。插件自有界面应为英文。
 3. 在 PowerShell 运行以下命令，替换路径。这个终端要保持运行，看到 `PID=…` 和 `READY` 才开始连接。
 
@@ -200,3 +200,17 @@ $env:JAVA_HOME = 'C:\Users\lenovo\.jdks\corretto-21.0.9'
 自动用例 `JfrCaptureTest` / `JfrIntegrationTest` 包括：无 MXBean、只读拒绝、输入时限校验、录制中拒绝下载、自动停止、提前停止、真实文件可读、扫描截断、禁止覆盖、三轮连接清理不影响其他 ID、创建迟到不启动、配置失败不重试、64 MiB 流上限和读取迟到取消后关闭流/移除 partial。传输异常用真实自有目标加客户端流返回注入验证，不冒充真实 WAN 故障。
 
 预算是保护措施而不是性能测量：每连接最多一录制；32 MiB 为目标 repository retention，可能按 chunk 超出且不涵盖总开销；64 MiB 为客户端下载硬字节上限；45 s 为块间时间检查，60 s 是界面等待截止；本地 JDK 解析至多检查 200k events/256 types/5 s，不保证单次解析可立即中断。更广 JDK、慢 WAN、JFR 压力/长时开销和虚拟线程事件覆盖仍待测。
+
+## GC & allocations 验收（0.12.0）
+
+这是复测步骤；实际执行结果仅见 validation/gui-validation。
+
+1. 运行 README 中 `capture-memory-demo.ps1`，确认 `MEMORY_RECORDING_PASS`、子进程退出、文件存在。无需 JMX 连接即可打开。
+2. 在 Flight Recorder 的 Open local .jfr 选择生成文件，切换 GC & allocations → GC timeline。应有 CYCLE/PAUSE 两类，时轴沿用库存的实际事件窗口；点击标记与表行均能选择对应证据。按 Duration 列排序后选择、用方向键移动，详情应仍对应正确 ID/纳秒值。
+3. 选 CYCLE，检查 sumOfPauses / longestPause 独立于周期 duration；不应输出停顿率或把两轨相加。空字段显示 Not reported / unsupported，真正的 0 显示 0 ns。
+4. Allocation pressure 中选 byte[] 对应类（JFR 名称可能是 `[B`），应看到样本数、精确 BigInteger 权重、百分比条。按 Samples / Weight / Share 排序。搜索类名后占比仍相对于所有已保留类，不应变成搜索结果内的 100%。
+5. 搜索不存在的名称，应出现无匹配提示、清除所选详情并禁用 Copy selected evidence。清空搜索后恢复表格；Copy coverage 包含原窗口/缺失/预算说明。
+6. 重新打开无相关事件的合法 JFR，应清空旧图表和类表；打开无效 .jfr 应显示文件错误，并清空本页旧数据。换连接同样清空。分别在 Light/Dark、125% 缩放观察，技术值不出现白色粗分隔。
+7. 运行 `gradlew test buildPlugin verifyPlugin`（AGENTS/README 有本机参数）。新核心测试在独立子 JVM 写 JFR，验证真实原字段总量、错误单位、负权重、Long.MAX_VALUE 相加、预算遗漏和部分扫描标识；不关闭 IDE 的线程泄漏检查。
+
+本轮未支持按 allocation stack/线程分组、时间范围筛选、GC heap 前后关联、内存泄漏判断。堆数据丢失、阈值过滤或未启用事件不能由本页恢复。GC 图中事件可能重叠，极短事件有 2 px 最小宽度，应使用表格与详情核对。

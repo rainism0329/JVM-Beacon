@@ -1,6 +1,17 @@
-# GUI 验证记录：0.1.2—0.11.0
+# GUI 验证记录：0.1.2—0.12.0
 
 最近日期：**2026-09-28**，时区 Asia/Shanghai（UTC+08:00）。这是部分真实界面流程的观察记录，**不代表全部 GUI 验收通过**。自动测试、安装包及兼容性检查另见 [验证与接续状态](validation.md)。
+
+## 0.12.0：GC 与分配压力
+
+最终包见 validation（14:44:36 构建）；**14:45:26.505—14:52:41.318** 运行于独立官方 IC 2025.1.3 / JBR 21 / Windows，窗口 1388×974、125%。包内与加载 JAR 哈希一致，runIde exit 0、会话 ERROR 0。以下截图均来自此最终会话，不使用较早候选截图。
+
+- 打开脚本真实 `memory.jfr`（118,545 bytes / 460 events），[Dark GC 双轨](../build/reports/ui-0.12.0/gc-dark.png)保留 16 cycles / 16 pauses。点击末尾周期标记后定位 [GC #16 / SerialOld / System.gc()](../build/reports/ui-0.12.0/gc-select.png)，详情为 7,069,500 ns。聚焦详情再 Ctrl+End 可读[暂停字段](../build/reports/ui-0.12.0/gc-detail.png)；此 SerialGC 样本周期和暂停相同，不据此外推其他收集器。
+- [分配页](../build/reports/ui-0.12.0/allocation-dark.png)显示 7 类、精确字节权重和占比条。输入 java.lang.String 后仅保留该行，份额仍 [0.245%](../build/reports/ui-0.12.0/filter.png)，[选中详情](../build/reports/ui-0.12.0/allocation-selection.png)为 3 samples / 710,312 weight，窗口可横向/纵向滚动。
+- 切换 IDEA 原生 [Light](../build/reports/ui-0.12.0/light.png)，字体/背景更新。搜索不存在名称，[旧详情清除且复制所选按钮禁用](../build/reports/ui-0.12.0/no-match.png)。[Coverage](../build/reports/ui-0.12.0/coverage.png)继续呈现全文件统计与实际事件窗口，不因搜索改变。
+- 重新打开仅含一个自定义事件的合法 no-sampling.jfr，GC/分配均清空，显示[无匹配事件与当前文件窗口](../build/reports/ui-0.12.0/empty.png)。打开自有无效测试文件时显示 [IO 文件错误](../build/reports/ui-0.12.0/invalid.png)，[GC 页面清空、复制禁用](../build/reports/ui-0.12.0/cleared.png)。
+
+候选修正：第一轮 125% GUI 中时间线/详情挤掉 GC 表格；最终版改成原生 OnePixelSplitter 与紧凑双轨。此窗口直接可见约 2 行 GC 表格，更多行使用滚动；详情长文本仍需滚动，未宣称已覆盖所有窄窗口/缩放。排序和 missing/zero 由组件测试覆盖，本次未人工遍历所有排序、复制、键盘组合，也未复测旧录制全流程或 IU GUI。
 
 ## 0.11.0：采样调用树与火焰图
 

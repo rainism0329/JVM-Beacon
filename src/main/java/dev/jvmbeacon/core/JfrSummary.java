@@ -15,7 +15,7 @@ import java.util.List;
 public final class JfrSummary {
     private JfrSummary() { }
     public record EventCount(String name, long count) { }
-    public record Report(String text, List<EventCount> types, long events, long bytes, Instant first, Instant last, boolean partial, JfrStacks.Data stacks) {
+    public record Report(String text, List<EventCount> types, long events, long bytes, Instant first, Instant last, boolean partial, JfrStacks.Data stacks, JfrMemory.Data memory) {
         public Report { types = List.copyOf(types); }
     }
     public static String read(Path path) throws IOException { return inspect(path).text(); }
@@ -31,6 +31,7 @@ public final class JfrSummary {
         if (size > JfrCapture.DOWNLOAD_BYTES) throw new IOException("Local JFR inventory is limited to 64 MiB files.");
         Map<String, Long> counts = new LinkedHashMap<>();
         JfrStacks.Builder stacks = new JfrStacks.Builder();
+        JfrMemory.Builder memory = new JfrMemory.Builder();
         long count = 0, otherTypes = 0;
         Instant first = null, last = null;
         boolean truncated;
@@ -40,6 +41,7 @@ public final class JfrSummary {
                 if (Thread.currentThread().isInterrupted()) throw new InterruptedIOException("Local JFR inventory cancelled.");
                 var event = file.readEvent();
                 stacks.accept(event);
+                memory.accept(event);
                 String type = event.getEventType().getName();
                 if (counts.containsKey(type) || counts.size() < 256) counts.merge(type, 1L, Long::sum);
                 else otherTypes++;
@@ -62,9 +64,9 @@ public final class JfrSummary {
         counts.entrySet().stream().sorted(Map.Entry.<String, Long>comparingByValue(Comparator.reverseOrder()).thenComparing(Map.Entry.comparingByKey()))
                 .forEach(entry -> result.append(String.format("%12d  %s%n", entry.getValue(), entry.getKey())));
         if (otherTypes != 0) result.append("Events from additional types: ").append(otherTypes).append('\n');
-        result.append("\nFor CPU, allocations, GC and stack analysis: open this local .jfr in JDK Mission Control.\n")
+        result.append("\nUse Sampled stacks and GC & allocations for bounded local analysis; JDK Mission Control offers deeper analysis.\n")
                 .append("No upload or cloud account is required. This inventory does not authenticate the file's target identity.\n");
         return new Report(result.toString(), counts.entrySet().stream().map(e -> new EventCount(e.getKey(), e.getValue())).toList(),
-                count, size, first, last, truncated, stacks.finish(truncated));
+                count, size, first, last, truncated, stacks.finish(truncated), memory.finish(truncated, first, last));
     }
 }

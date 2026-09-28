@@ -38,6 +38,7 @@ final class JfrPanel extends JPanel {
     private final Jobs jobs;
     private final Consumer<String> status;
     private final JfrStacksPanel stacks;
+    private final JfrMemoryPanel memory = new JfrMemoryPanel();
     private final JButton refresh = new JButton("Check / refresh");
     private final JButton record = new JButton("Record…");
     private final JButton stop = new JButton("Stop…");
@@ -109,6 +110,7 @@ final class JfrPanel extends JPanel {
         views.addTab("Event inventory", local);
         views.addTab("Inventory details", BeaconUi.scroll(inventory));
         views.addTab("Sampled stacks", stacks);
+        views.addTab("GC & allocations", memory);
         JTextArea guide = BeaconUi.text("JFR / CAPTURE CONTRACT\n\n"
                 + "1. Check / refresh discovers the target's Flight Recorder MXBean and default/profile presets.\n"
                 + "2. Turn off Read-only. Record confirms the target, configuration and 5–120 s duration.\n"
@@ -162,7 +164,7 @@ final class JfrPanel extends JPanel {
     void setSession(JmxClient next, boolean busy, boolean readOnly) {
         if (client != next) {
             client = next; state = null; uncertain = false; localFile = null;
-            stacks.clear();
+            stacks.clear(); memory.clear();
             compactState.setText(next == null ? "Local analysis · No target connected" : "Connected · JFR support not checked");
             expandCapture(next != null);
             events.setRowCount(0); search.setText(""); inventorySummary.setText("No local recording inspected");
@@ -276,14 +278,14 @@ final class JfrPanel extends JPanel {
             var report = JfrSummary.inspect(path);
             return new Local(report, JfrStacks.aggregate(report.stacks(), JfrStacks.Kind.JAVA, null));
         }, result -> {
-            var report = result.report(); stacks.load(report.stacks(), result.view()); expandCapture(false);
+            var report = result.report(); stacks.load(report.stacks(), result.view()); memory.load(report.memory()); expandCapture(false);
             localFile = path.toAbsolutePath(); inventory.setText(report.text()); inventory.setCaretPosition(0);
             events.setRowCount(0); search.setText("");
             for (var type : report.types()) events.addRow(new Object[]{type.name(), type.count()});
             inventorySummary.setText(String.format("%,d events · %,d bytes · %s · Counts, not CPU time", report.events(), report.bytes(), report.partial() ? "PARTIAL scan" : "End of file"));
             inventorySummary.setToolTipText("Observed event window: " + report.first() + " → " + report.last() + "; " + localFile);
             views.setSelectedIndex(0); updateActions();
-            status.accept("Local JFR ready. Open Sampled stacks for the flame graph, call tree and coverage limits.");
-        }, error -> { stacks.clear(); events.setRowCount(0); inventorySummary.setText("Local inventory unavailable · See details"); views.setSelectedIndex(1); inventory.setText(error + "\nThe file was not modified. Try opening it in JDK Mission Control."); localFile = path.toAbsolutePath(); updateActions(); });
+            status.accept("Local JFR ready. Explore Sampled stacks or GC & allocations; each view includes coverage limits.");
+        }, error -> { stacks.clear(); memory.clear(); events.setRowCount(0); inventorySummary.setText("Local inventory unavailable · See details"); views.setSelectedIndex(1); inventory.setText(error + "\nThe file was not modified. Try opening it in JDK Mission Control."); localFile = path.toAbsolutePath(); updateActions(); });
     }
 }

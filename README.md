@@ -1,8 +1,8 @@
 # JVM Beacon
 
-IDEA 原生的 JMX 管理与 JVM 运行时诊断工作台。当前开发版本为 **0.11.0**（2026-09-28）：核心流程无需云账号、外部 AI 或上传运行数据。[GitHub 源码仓库](https://github.com/rainism0329/JVM-Beacon) 为私有。本仓库尚未发布到 Marketplace；名称、plugin ID 和发布者信息仍属开发阶段。
+IDEA 原生的 JMX 管理与 JVM 运行时诊断工作台。当前开发版本为 **0.12.0**（2026-09-28）：核心流程无需云账号、外部 AI 或上传运行数据。[GitHub 源码仓库](https://github.com/rainism0329/JVM-Beacon) 为私有。本仓库尚未发布到 Marketplace；名称、plugin ID 和发布者信息仍属开发阶段。
 
-0.11.0 增加 **JFR Sampled stacks**：可缩放火焰图、调用树、Java/native 采样分离、线程筛选、方法高亮和保守的源码候选定位。图宽表示已保留样本数量，缺失/截断/遗漏可见，不能当作 CPU 时间。保留有界 JFR 录制/下载、事件表、Signal timeline、连接工作区、锁链/线程比较、Hot threads、多连接标签、复杂值浏览、`hostname:port` 和受控 MBean 方法调用。界面保持英文和原生主题。实际验收范围见 [验证记录](docs/validation.md) 和 [GUI 记录](docs/gui-validation.md)，仍是开发预览。
+0.12.0 增加 **JFR GC & allocations**：GC 周期与暂停双轨时间线、事件搜索/排序/精确详情、按类汇总分配采样权重及占比。周期不当暂停，权重不当实际存活内存；缺失/遗漏和扫描边界可见。保留采样火焰图/调用树、JFR 录制/下载、Signal timeline、连接工作区、锁链/线程比较、Hot threads、多连接标签、复杂值浏览、`hostname:port` 和受控 MBean 方法调用。界面保持英文和原生主题。实际验收范围见 [验证记录](docs/validation.md) 和 [GUI 记录](docs/gui-validation.md)，仍是开发预览。
 
 第一次测试可按下方顺序操作：**安装 → 启动测试 JVM → 单连接流程 → 双连接标签页**。完整验收清单、预期结果和排错见 [测试指南](docs/testing.md)。文档中的待执行步骤不代表已经验收通过。
 
@@ -12,7 +12,7 @@ IDEA 原生的 JMX 管理与 JVM 运行时诊断工作台。当前开发版本�
 
 本轮开发与兼容性检查目标是 **IntelliJ IDEA Community / Ultimate 2025.1.3，IC/IU-251.26927.53，JBR 21，Windows**。Community 使用官方完整发行包；被监控测试程序使用 JDK 21。描述符允许的版本范围不等于全部版本均已实测，兼容性检查也不代替 GUI 验收。
 
-1. 在 IDEA 的 **Settings → Plugins → 齿轮 → Install Plugin from Disk…** 选择 [jvm-beacon-0.11.0.zip](build/distributions/jvm-beacon-0.11.0.zip)，按 IDE 提示重新启动；最终包验证状态见上方记录。
+1. 在 IDEA 的 **Settings → Plugins → 齿轮 → Install Plugin from Disk…** 选择 [jvm-beacon-0.12.0.zip](build/distributions/jvm-beacon-0.12.0.zip)，按 IDE 提示重新启动；最终包验证状态见上方记录。
 2. 打开项目，通过 **View → Tool Windows → JVM Beacon** 打开底部工具窗口。
 3. 点击 **Connect JVM…**，选择当前用户可见的本地 Java 进程，或输入 PID。若该进程尚未开启本地管理端点，需要明确勾选 **Allow starting the local management agent if needed**；这会改变目标进程状态。
 4. 连接成功后核对顶部的目标身份和启动时间。默认开启观察模式，自动采样关闭；可在“Telemetry”手动采样或开启每 2 秒采样。
@@ -221,3 +221,19 @@ $beaconIde = 'D:\IdeaProjects\JVM-Beacon\.intellijPlatform\ides\community-2025.1
 5. **Coverage** 和图上方显示扫描部分状态、缺失栈、被预算省略的样本与截断数量。**Copy evidence** 复制范围说明和选中帧，不自动上传或导出整棵树。没有采样不代表没有活动。
 
 每文件最多保留 20,000 个采样、200,000 帧引用、128 帧/栈、256 个线程、8,192 个不同帧、2 Mi 字符帧元数据；每个名字/描述符上限 512 字符。每棵树 8,192 节点，超过时省略整条样本路径并计数。选择数量不等于完整录制数量；截断栈以 `[older frames not captured]` 显示，按文件遍历先到先保留。当前未提供时间范围筛选、分配火焰图、GC/锁事件关联或完整 JMC 分析。
+
+## JFR GC 与分配分析（0.12.0）
+
+打开或下载 `.jfr` 后，切换 **Flight Recorder → GC & allocations**：
+
+- **GC timeline**：紫色为 `GarbageCollection` 周期，青色为顶层 `GCPhasePause`；点击标记或用键盘选择表格行，下方显示纳秒精度与 UTC 时窗。Cycle 可能含并发工作，不是暂停时长。嵌套阶段不重复累加；小于 2 像素的事件显示最小标记，精确时长以详情为准。
+- **Allocation pressure**：按 `ObjectAllocationSample.weight` 聚合到记录内 class ID + 类名；权重单位是 bytes，表示统计分配压力，不是单对象大小、精确分配量或存活内存。搜索不会改变占比分母；点击列头排序。复制所选证据会附带覆盖说明。
+- **Coverage**：保留总数、无效/不支持、遗漏、扫描窗口和范围。最多保留 4,096 GC 事件、2,048 类，沿用同次 64 MiB/200k events/5 s 扫描；超限结果不保证代表性。无事件不能排除问题；当前未关联堆前后量、allocation stack 或跨事件因果。
+
+快速生成真实演示文件（只启动独立测试 JVM，结束后自动退出）：
+
+```powershell
+.\scripts\capture-memory-demo.ps1 -JdkHome 'C:\Users\lenovo\.jdks\corretto-21.0.9'
+```
+
+成功输出 `MEMORY_RECORDING_PASS` 和 `build\examples\memory-时间戳\memory.jfr`，在 **Open local .jfr…** 选择该文件。测试堆上限 64 MiB、Serial GC、最多 256 MiB 累积分配/约 2 MiB 数组载荷保留，循环最多 3 秒；会在自有子进程中显式请求 GC，不连接已有业务进程。文件含额外测试事件，用于验证异常权重；产品不会将这些事件冒充标准 JDK 样本。更多手工步骤见测试指南。

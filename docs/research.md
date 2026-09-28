@@ -163,3 +163,14 @@
 - **官方源码元数据，jdk21u master，访问日版本快照而非固定发行 tag**：[metadata.xml](https://raw.githubusercontent.com/openjdk/jdk21u/master/src/hotspot/share/jfr/metadata/metadata.xml) 两种采样事件均使用 sampledThread，不用 eventThread 推断采样线程。NativeMethodSample 描述在 native 中观察线程状态。该文件声明 GPLv2；仅核对数据定义，没有复制实现或资源。尝试抓取 recorder/stacktrace/jfrStackTrace.cpp 与 internal/consumer/StackTrace.java 失败，不作为已读证据。
 - **实际测试，本机 Corretto 21.0.9、认证 loopback 自有 fixture**：8 秒 profile 文件含 ExecutionSample=4、NativeMethodSample=388。JDK jfr print 在 native 栈里读到 FileInputStream.readBytes、Net.accept，说明 native 栈不能直接解释为 CPU 执行耗时；范围限于本次文件。生产入口仅识别两个明确事件名，确定性转换测试的自定义事件不伪装成真实 CPU 采样。
 - **产品/实现判断**：分开 event kind，宽度按表示样本计数，线程筛选只针对已保留线程；截断根、丢弃数量、扫描窗口明显可见。原生 Swing 自绘并配键盘调用树，无新依赖或竞品图标。减少切换工具的价值仍是待验证假设，暂不宣称替代完整 profiler。源码候选需精确类+descriptor+方法所属行，再让用户确认未核验版本/loader 关系。
+
+## 0.12.0：GC / allocation 语义补查（2026-09-28）
+
+适用基线 JDK 21，插件平台继续 IC/IU 2025.1.3，无新增第三方依赖或竞品资源。
+
+- 官方定义：[OpenJDK jdk21u metadata.xml](https://raw.githubusercontent.com/openjdk/jdk21u/master/src/hotspot/share/jfr/metadata/metadata.xml)。GarbageCollection 的 duration 与 sumOfPauses / longestPause 分离；GCPhasePause 与多个嵌套 Level 事件独立。设计推断：仅绘顶层暂停，不将周期当暂停、不将嵌套事件重复求和。
+- 同一官方 metadata 为 ObjectAllocationSample.weight 标注 bytes 与统计分配压力语义；TLAB、outside-TLAB 的 allocationSize 是另一些事件，不能直接混合。产品只做保留权重占比，不估计单对象大小、存活堆、速率或泄漏结论。[DataAmount JDK 21 API](https://docs.oracle.com/en/java/javase/21/docs/api/jdk.jfr/jdk/jfr/DataAmount.html) 用于校验单位注解。
+- 实测证据：独立 Corretto 21.0.9 / SerialGC / 64 MiB 堆 fixture 生成录制，再由 RecordingFile 原字段独立累加与产品模型比较。具体最终次数和 GUI 证据见 validation。并未实测所有收集器/JDK。
+- 访问失败：[JDK-8307488](https://bugs.openjdk.org/browse/JDK-8307488) 返回 403；gcTraceSend.cpp raw 路径 cache miss。未将它们当作已阅读证据。上述 metadata 属 GPLv2，仅核对事件协议，自行实现，没有复用其代码/资源；本项目开发许可证状态不因此改变。
+
+用户价值假设：在同一 IDE 内从录制直接定位 GC 时刻和高权重类，减少工具切换；尚无正式用户研究证明效率提升。真实暂停字段和明确遗漏比泛化健康分更可核验，因此优先做此范围，堆关联、分配栈与锁事件继续排后。
