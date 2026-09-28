@@ -219,3 +219,11 @@ GC 不派生暂停占比，CPU 不声称两秒平均。区间仅比较端点：�
 GC 双轨分别展示 GarbageCollection / GCPhasePause，表格和纳秒详情是精确读数入口；未求暂停百分比，也不跨事件猜测根因。Allocation 只聚合带 bytes 注解且非负的 weight，以 BigInteger 避免溢出，键是记录内 class ID + 名称；已保留类继续累加，新类超限计遗漏。份额分母固定所有保留权重，搜索仅影响可见项，零总权重不显示伪造的百分比。复制所选证据包含覆盖报告。
 
 暂无 allocation 栈/线程归因、堆前后关联、时间范围过滤或泄漏诊断。下一步优先 **JFR 锁等待事件分析（JavaMonitorEnter / ThreadPark 的不同语义、阈值与栈）**，之后做统一时间范围筛选和 Run/Debug 目标关联；性能与广泛兼容性另行验收。
+
+## 0.13.0：等待事件工作流
+
+同次 JFR 扫描复制 JavaMonitorEnter、JavaMonitorWait、ThreadPark，不新增远程请求或线程池。每页最多 4096 events、65536 frame refs、64 帧/栈、4096 唯一帧，事件/帧元数据各 1 Mi 字符、单名称512；栈预算不足保留事件时长，区分未录/遗漏/截断。class ID+descriptor+line 复用现有保守源代码候选协议。对象地址不进模型；previousOwner/notifier 不推断当前持锁关系。
+
+热点按类型、类、叶帧分组；BigInteger 累加纳秒，避免并发等待和大值溢出造成假指标，不计算墙钟百分比。筛选在 LOCAL_IO，Apply 明确提交，generation 丢弃换文件后的迟到结果；UI 表格批量替换，热点下钻事件、详情使用原生对话框，保留主表空间。详情可查看原始窗口和栈、复制覆盖，需用户选有行号的帧才导航。
+
+第一次测试把虚拟线程 park 必有 ThreadPark 当作假设，真实文件推翻了该假设。产品遵从录制内容，报告覆盖不足；自定义 probe 只用于验证 virtual 元数据，不补造标准事件。下一阶段优先统一 JFR 时间区间筛选与跨视图关联，其后 Run/Debug 目标关联；VirtualThreadPinned 与分配栈分析按独立语义扩展。仍未做大文件/长时/所有 JDK 或 IDE 的全面性能验收。

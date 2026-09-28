@@ -1,8 +1,8 @@
 # JVM Beacon
 
-IDEA 原生的 JMX 管理与 JVM 运行时诊断工作台。当前开发版本为 **0.12.0**（2026-09-28）：核心流程无需云账号、外部 AI 或上传运行数据。[GitHub 源码仓库](https://github.com/rainism0329/JVM-Beacon) 为私有。本仓库尚未发布到 Marketplace；名称、plugin ID 和发布者信息仍属开发阶段。
+IDEA 原生的 JMX 管理与 JVM 运行时诊断工作台。当前开发版本为 **0.13.0**（2026-09-28）：核心流程无需云账号、外部 AI 或上传运行数据。[GitHub 源码仓库](https://github.com/rainism0329/JVM-Beacon) 为私有。本仓库尚未发布到 Marketplace；名称、plugin ID 和发布者信息仍属开发阶段。
 
-0.12.0 增加 **JFR GC & allocations**：GC 周期与暂停双轨时间线、事件搜索/排序/精确详情、按类汇总分配采样权重及占比。周期不当暂停，权重不当实际存活内存；缺失/遗漏和扫描边界可见。保留采样火焰图/调用树、JFR 录制/下载、Signal timeline、连接工作区、锁链/线程比较、Hot threads、多连接标签、复杂值浏览、`hostname:port` 和受控 MBean 方法调用。界面保持英文和原生主题。实际验收范围见 [验证记录](docs/validation.md) 和 [GUI 记录](docs/gui-validation.md)，仍是开发预览。
+0.13.0 增加 **JFR Wait analysis**：分别分析 monitor entry、Object.wait 和 park，按已记录等待时长查看热点，下钻事件、历史相关线程、栈与源码候选。保留 GC 双轨时间线和分配压力分析；等待总时长不当 CPU 时间，park 不默认判为锁竞争。保留采样火焰图/调用树、JFR 录制/下载、Signal timeline、连接工作区、锁链/线程比较、Hot threads、多连接标签、复杂值浏览、`hostname:port` 和受控 MBean 方法调用。界面保持英文和原生主题。实际验收范围见 [验证记录](docs/validation.md) 和 [GUI 记录](docs/gui-validation.md)，仍是开发预览。
 
 第一次测试可按下方顺序操作：**安装 → 启动测试 JVM → 单连接流程 → 双连接标签页**。完整验收清单、预期结果和排错见 [测试指南](docs/testing.md)。文档中的待执行步骤不代表已经验收通过。
 
@@ -12,7 +12,7 @@ IDEA 原生的 JMX 管理与 JVM 运行时诊断工作台。当前开发版本�
 
 本轮开发与兼容性检查目标是 **IntelliJ IDEA Community / Ultimate 2025.1.3，IC/IU-251.26927.53，JBR 21，Windows**。Community 使用官方完整发行包；被监控测试程序使用 JDK 21。描述符允许的版本范围不等于全部版本均已实测，兼容性检查也不代替 GUI 验收。
 
-1. 在 IDEA 的 **Settings → Plugins → 齿轮 → Install Plugin from Disk…** 选择 [jvm-beacon-0.12.0.zip](build/distributions/jvm-beacon-0.12.0.zip)，按 IDE 提示重新启动；最终包验证状态见上方记录。
+1. 在 IDEA 的 **Settings → Plugins → 齿轮 → Install Plugin from Disk…** 选择 [jvm-beacon-0.13.0.zip](build/distributions/jvm-beacon-0.13.0.zip)，按 IDE 提示重新启动；最终包验证状态见上方记录。
 2. 打开项目，通过 **View → Tool Windows → JVM Beacon** 打开底部工具窗口。
 3. 点击 **Connect JVM…**，选择当前用户可见的本地 Java 进程，或输入 PID。若该进程尚未开启本地管理端点，需要明确勾选 **Allow starting the local management agent if needed**；这会改变目标进程状态。
 4. 连接成功后核对顶部的目标身份和启动时间。默认开启观察模式，自动采样关闭；可在“Telemetry”手动采样或开启每 2 秒采样。
@@ -237,3 +237,22 @@ $beaconIde = 'D:\IdeaProjects\JVM-Beacon\.intellijPlatform\ides\community-2025.1
 ```
 
 成功输出 `MEMORY_RECORDING_PASS` 和 `build\examples\memory-时间戳\memory.jfr`，在 **Open local .jfr…** 选择该文件。测试堆上限 64 MiB、Serial GC、最多 256 MiB 累积分配/约 2 MiB 数组载荷保留，循环最多 3 秒；会在自有子进程中显式请求 GC，不连接已有业务进程。文件含额外测试事件，用于验证异常权重；产品不会将这些事件冒充标准 JDK 样本。更多手工步骤见测试指南。
+
+## JFR 等待热点与事件（0.13.0）
+
+打开录制后选择 **Flight Recorder → Wait analysis**：
+
+1. 选择 All event kinds / Monitor entry / Object.wait / Park，可输入线程名、类名或记录中的方法名，再 **Apply filters**；筛选只在本地进行。
+2. **Wait hotspots** 按类型 + 目标类 ID/名字 + 记录叶帧聚合。点击列头排序；选择热点后 **Show hotspot events**，或按 Enter/双击，下钻实际事件。**All filtered events** 返回当前过滤后的全部事件。
+3. 在 **Events** 选择一行，**Inspect event…**（或 Enter/双击）显示精确纳秒时长、时窗、事件线程、历史 previousOwner/notifier 和叶帧在前的栈。选择有行号的帧可 **Find source candidate…**，仍需唯一匹配和确认，不能保证源码版本一致。
+4. **Copy report** / **Copy event & coverage** 带上筛选、覆盖与边界；缺栈不丢弃已记录事件时长。Coverage 区分未记录/预算遗漏/截断栈与缺失事件。
+
+总时长可在并发线程间重叠，不是 CPU 时间、锁持有时间或墙钟百分比。同类不等于同一个锁对象；本页不保留对象地址，也不据历史 owner 字段构造当前死锁图。Park 可能是正常空闲或协作等待。本轮 Corretto 21 测试的普通虚拟线程 park 未生成 ThreadPark 事件；虚拟线程标签只说明已有事件元数据，不保证完整覆盖。
+
+生成独立可清理的真实测试文件：
+
+```powershell
+.\scripts\capture-waits-demo.ps1 -JdkHome 'C:\Users\lenovo\.jdks\corretto-21.0.9'
+```
+
+成功输出 `WAIT_RECORDING_PASS` 和文件路径。自有 JVM 堆上限 64 MiB，显式零阈值录制；制造约 140 ms 监视器竞争、120 ms 条件等待、160 ms 平台/虚拟线程 park，所有等待及 join 有上限，工作线程和 JVM 完成后退出；不连接业务进程。搜索 `beacon-wait` 定位自有负载。文件中额外的自定义测试探针不会被产品当成标准 wait 事件；一般 profile 录制的阈值可能隐藏短事件。

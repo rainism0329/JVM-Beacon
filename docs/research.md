@@ -174,3 +174,15 @@
 - 访问失败：[JDK-8307488](https://bugs.openjdk.org/browse/JDK-8307488) 返回 403；gcTraceSend.cpp raw 路径 cache miss。未将它们当作已阅读证据。上述 metadata 属 GPLv2，仅核对事件协议，自行实现，没有复用其代码/资源；本项目开发许可证状态不因此改变。
 
 用户价值假设：在同一 IDE 内从录制直接定位 GC 时刻和高权重类，减少工具切换；尚无正式用户研究证明效率提升。真实暂停字段和明确遗漏比泛化健康分更可核验，因此优先做此范围，堆关联、分配栈与锁事件继续排后。
+
+## 0.13.0：JFR 等待语义补查（2026-09-28）
+
+适用基线仍为 JDK 21 / IDEA 2025.1.3，界面与资源均自行实现，无新增外部依赖。
+
+- 官方事件协议：[OpenJDK jdk21u metadata](https://raw.githubusercontent.com/openjdk/jdk21u/master/src/hotspot/share/jfr/metadata/metadata.xml) 区分 JavaMonitorEnter、JavaMonitorWait、ThreadPark，分别暴露 monitorClass/previousOwner、monitorClass/notifier、parkedClass。产品不把 previousOwner 当当前 owner，不保留 address 来推断对象身份。
+- 官方行为文档：[Object.wait](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Object.html)、[LockSupport](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/locks/LockSupport.html)。条件等待、重新获得 monitor、park 的许可/中断/超时/伪唤醒是不同概念；park 本身不能给出根因。总事件时长不能当 owner 持锁时间或 CPU 开销。
+- 官方预设：[JDK 21u profile.jfc](https://raw.githubusercontent.com/openjdk/jdk21u/master/src/jdk.jfr/share/conf/jfr/profile.jfc) 中三种事件 enabled、stackTrace=true、locking threshold 默认 10 ms。这是该文件的官方默认值，不是任意目标/任意录制实际设置；插件不重建历史阈值。fixture 显式零阈值便于验证。
+- [RecordedThread JDK 21](https://docs.oracle.com/en/java/javase/21/docs/api/jdk.jfr/jdk/jfr/consumer/RecordedThread.html) 提供 JFR ID、Java ID 与虚拟线程元数据；[虚拟线程官方文档](https://docs.oracle.com/en/java/javase/21/core/virtual-threads.html) 单独列出 VirtualThreadPinned 等事件。实际 Corretto 21 fixture 中普通 virtual park 没有标准 ThreadPark 记录；独立自定义 probe 确认负载确已执行，并验证元数据转换，probe 不进入产品分析。
+- 补查 [JDK21u VirtualThread.java](https://raw.githubusercontent.com/openjdk/jdk21u/master/src/java.base/share/classes/java/lang/VirtualThread.java) 的 parkNanos/yield 路径，全文未发现 ThreadParkEvent 名称；仅作实现线索，不从单文件检索断言所有路径或更新版本均缺少该事件。上述源码按 GPLv2 核对协议/行为，没有搬运实现。
+
+差异化假设是从等待热点直接回到单次事件与源代码候选，减少丢失上下文；尚未做正式效率研究。选择保守事件证据优先于不可靠的自动锁图/死锁结论。原始计数、版本与失败过程见 validation。

@@ -1,8 +1,32 @@
-# 0.12.0 验证与接续状态
+# 0.13.0 验证与接续状态
 
 日期：2026-09-28，Windows 11 x64。这是**功能开发预览**，完成了下列具体场景，尚未完成全部验收或整个产品愿景。历史记录按版本保留，不由旧构建外推新包通过。
 
-## 0.12.0 当前验证
+## 0.13.0 当前验证
+
+交付本地 JFR **Wait analysis**：Monitor entry、Object.wait、Park 分开聚合，线程/类/记录方法搜索、时长排序、热点下钻、精确事件与栈、源码候选和覆盖报告。与原有库存/采样/GC 分析共用一次扫描，不增加远程采集。不是当前锁图或死锁判定。
+
+最终 [jvm-beacon-0.13.0.zip](../build/distributions/jvm-beacon-0.13.0.zip)：**2026-09-28 15:47:10 +08:00，445,592 bytes**；SHA-256 `c33a76a2205de9ef50f5ec52af513466dc2e5be75324b2e2ab449ff76b62cc5b`。包内与最终沙箱加载 JAR 均为 `5dcba46bbb67eb76f7ad79aafd9f38ab9d341e3009b45dce4aae33b78c98df2a`。[核对记录](../build/reports/release-checks-0.13.0.json)。未发布 Release/Marketplace。
+
+| 检查 | 实际结果与边界 |
+|---|---|
+| 最终构建 | `test buildPlugin verifyPlugin` exit 0，**125 项，0 失败/错误/跳过**。[日志](../build/reports/checks-0.13.0.txt) |
+| 新增核心测试 | 4 项：独立子 JVM 三类真实等待与原始时长总数逐类核对、历史 owner/记录栈/平台与虚拟元数据；事件和栈预算独立、无栈/缺类、排除自定义探针；BigInteger 溢出保护与 kind/class ID 隔离；取消/超长查询 |
+| 新增 UI 测试 | 2 项：排序后热点映射与清空选择/按钮；busy 禁止提交、LOCAL_IO 和换文件后迟到过滤丢弃 |
+| 兼容性 | Verifier 1.408 对 IC/IU **251.26927.53 均 Compatible**。既有 SslRMIClientSocketFactory 的 JDK 8 规则 deprecated 提示和 IDE layout WARN 保留；JDK 21 的真实 TLS 回归通过，不外推其他版本 |
+| 最终 IDE | 官方 IC 2025.1.3 / JBR 21 / Windows：**15:48:00.006** 加载，**15:53:41.040** 正常退出，runIde exit 0，当前会话 ERROR **0**。[日志](../build/reports/ide-load-0.13.0.txt)；平台 WARN 保留 |
+| GUI | 1388×974 / 125% / Light、Dark；本地打开、搜索、时长排序、Enter 下钻、事件详情、确认后源码第 48 行、覆盖、无事件文件、坏文件清空。[按最终包记录](gui-validation.md) |
+| 演示脚本 | `capture-waits-demo.ps1` exit 0 / WAIT_RECORDING_PASS；独立 Corretto 21.0.9、64 MiB JVM，所有负载线程结束并退出。文件 **119,319 bytes / 15 events / EOF**，其中标准等待 **2 Enter / 4 Wait / 6 Park**，无无效/遗漏/缺栈/截断。[文件](../build/examples/waits-20260928-153112-096/waits.jfr)、[独立解析](../build/reports/waits-evidence-0.13.0.txt) |
+
+真实文件按 `beacon-wait` 筛出 5 个事件/5 个热点；争用事件为 **142,229,700 ns**，previousOwner 为 beacon-wait-owner，栈包含 enterGate:48。录制的 3 个额外自定义事件仅用于测试，不作为标准等待展示。普通虚拟线程 park 在此次 JDK 中没有标准 ThreadPark；custom probe 证明执行和 virtual 元数据，不能用来补造标准事件或声明全线程覆盖。
+
+失败与修正：第一轮 fixture 成功日志的非 ASCII 字符遇到 Windows 输出编码不一致，改用 ASCII 成功标记；第二轮测试假定普通虚拟 park 必有 ThreadPark，真实文件推翻假设，改为与原文件实际覆盖核对并在产品明确边界。GUI 候选发现默认列宽截断表头，调整列宽与简短单位标签后重跑最终全套检查；长名称和部分单元格仍可能省略，可使用原生展开/调整列宽和事件详情。没有删除失败用例、禁用泄漏检测或伪造事件。
+
+资源预算：每页追加至多 4096 事件、65536 帧引用、每栈 64 帧、4096 唯一帧，事件与帧元数据各 1 Mi 字符；缺栈保留已记录时长。沿用 LOCAL_IO 两线程、64 MiB/200k events/5 s 软检查、8 s UI 截止；未声称能立即中断单次 JDK 解析。预算不是峰值内存或 IDE 开销测量，本轮未做大文件、8 页和长时间运行的完整资源验收。
+
+未验证/未实现：IU GUI、更多 JDK/OS、全部键盘/无障碍/窄窗口组合、剪贴板内容回读、全部 kind/query GUI 组合、极端限额文件；没有逐个重测旧远程录制 GUI 按钮（核心回归已跑）。未实现统一时间区间、VirtualThreadPinned、allocation 栈/线程归因；历史 owner 不组成当前锁图，等待总时长不当 CPU 或墙钟份额。下一阶段优先统一 JFR 时间区间与跨视图关联，再做 Run/Debug 目标关联。
+
+## 0.12.0 历史验证
 
 交付 JFR GC 双轨时间线、可搜索/排序事件表、纳秒详情、分配样本按类汇总与权重占比、复制证据/覆盖报告。没有把周期时长当暂停，也没有把权重当存活堆或泄漏判断。全部插件自有 UI 继续使用英文。
 

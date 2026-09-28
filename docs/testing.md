@@ -1,10 +1,10 @@
 # 手动测试指南
 
-适用开发版本：0.12.0。建议环境：Windows、IDEA 2025.1.3、完整 JDK 21。这里只说明**怎么测试**；实际通过/失败/未测范围见 [validation.md](validation.md) 和 [gui-validation.md](gui-validation.md)。不要在未知业务进程上验证写入、方法、压力或退出。
+适用开发版本：0.13.0。建议环境：Windows、IDEA 2025.1.3、完整 JDK 21。这里只说明**怎么测试**；实际通过/失败/未测范围见 [validation.md](validation.md) 和 [gui-validation.md](gui-validation.md)。不要在未知业务进程上验证写入、方法、压力或退出。
 
 ## 准备：约 2 分钟
 
-1. 按 [README 安装步骤](../README.md#安装与开始) 安装 `build/distributions/jvm-beacon-0.12.0.zip`，重启 IDE；在 Plugins 中确认显示 0.12.0。
+1. 按 [README 安装步骤](../README.md#安装与开始) 安装 `build/distributions/jvm-beacon-0.13.0.zip`，重启 IDE；在 Plugins 中确认显示 0.13.0。
 2. 打开 **View → Tool Windows → JVM Beacon**。工具窗口太矮时向上拖顶部边缘；结果区的细分隔线也可以调整。插件自有界面应为英文。
 3. 在 PowerShell 运行以下命令，替换路径。这个终端要保持运行，看到 `PID=…` 和 `READY` 才开始连接。
 
@@ -214,3 +214,17 @@ $env:JAVA_HOME = 'C:\Users\lenovo\.jdks\corretto-21.0.9'
 7. 运行 `gradlew test buildPlugin verifyPlugin`（AGENTS/README 有本机参数）。新核心测试在独立子 JVM 写 JFR，验证真实原字段总量、错误单位、负权重、Long.MAX_VALUE 相加、预算遗漏和部分扫描标识；不关闭 IDE 的线程泄漏检查。
 
 本轮未支持按 allocation stack/线程分组、时间范围筛选、GC heap 前后关联、内存泄漏判断。堆数据丢失、阈值过滤或未启用事件不能由本页恢复。GC 图中事件可能重叠，极短事件有 2 px 最小宽度，应使用表格与详情核对。
+
+## Wait analysis 验收（0.13.0）
+
+这些是复测步骤；实际执行范围见 validation/gui-validation。
+
+1. 运行 README 中 capture-waits-demo 命令，确认 WAIT_RECORDING_PASS。打开生成的 waits.jfr，Wait analysis 应按三种事件分别分组，显示 EOF/部分扫描及 Coverage。
+2. 搜索 beacon-wait 后 Apply filters。热点排序后按 Enter 下钻，Events 的线程/类型/时长必须对应所选热点；All filtered events 恢复全部过滤结果，清空输入必须重新 Apply 才改变视图。Coverage 保存实际生效的筛选。
+3. 搜索 beacon-wait-entrant，选择 Monitor entry、Apply，进入事件详情。Previous owner 应为 beacon-wait-owner（历史字段）；栈包含 enterGate。该例时长不是 owner 自身运行时间，也不构成死锁证据。
+4. 打开项目中的 WaitRecordingFixture.java（可直接使用仓库源码或加入已配置 JDK 21 的测试模块），选择 enterGate 栈帧，再 Find source candidate。必须先出现候选确认，显示版本/loader 未核验；不存在或重复候选不得猜测跳转。
+5. 分别搜索 beacon-wait-condition、beacon-wait-platform-park，检查 Object.wait 与 Park 区分。当前 JDK 21 普通 virtual park 可缺少标准事件；不能要求界面伪造它。自定义 VirtualWaitProbe 仅用于核心元数据测试，不在产品等待表内。
+6. 搜索不存在的词并 Apply 应显示空表；重开合法无事件 JFR、打开无效文件、换目标后，旧热点/事件必须清空。后台筛选期间不能重复提交；换文件/clear 后迟到结果不能恢复旧表。
+7. 在 Light/Dark 和 125% 缩放检查热点表、事件详情弹窗、键盘下钻、无选择/空栈/source 按钮状态。表格的精确小数单位是 ms，弹窗保留原纳秒值。
+
+预算：等待事件共 4096 条、64 帧/栈、65536 帧引用、4096 不同帧，事件元数据和栈符号各 1 Mi 字符；名称/描述符各 512 字符。达到栈预算时保留事件并显式标注栈遗漏。未实现时间范围选择、按锁实例聚合、park 原因诊断或 VirtualThreadPinned 分析。

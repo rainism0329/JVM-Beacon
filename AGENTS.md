@@ -1,6 +1,6 @@
 # JVM Beacon
 
-IDEA 原生 JMX 诊断插件；当前开发版本 0.12.0（2026-09-28）。用户已授权创建并推送到现有账号 rainism0329 的私有 GitHub 仓库 JVM-Beacon；不公开仓库、不发布 Marketplace 或 GitHub Release。
+IDEA 原生 JMX 诊断插件；当前开发版本 0.13.0（2026-09-28）。用户已授权创建并推送到现有账号 rainism0329 的私有 GitHub 仓库 JVM-Beacon；不公开仓库、不发布 Marketplace 或 GitHub Release。
 
 - Java 21、IntelliJ Platform Gradle Plugin 2.x、Swing；纯 JDK 核心放在 `dev.jvmbeacon.core`，IDE 适配/UI 放在 `dev.jvmbeacon.ui`。
 - UI 复用 `BeaconUi`：OnePixelSplitter、动态主题色、DPI 间距和字体随主题更新；不恢复标准 Swing 粗分隔或固定亮色背景。
@@ -33,3 +33,4 @@ IDEA 原生 JMX 诊断插件；当前开发版本 0.12.0（2026-09-28）。用�
 - JFR 内存分析与库存同次扫描；GC 只收 GarbageCollection / 顶层 GCPhasePause，共 4096 个、每名称 512 字符；周期不当暂停、不加嵌套阶段或算停顿率。ObjectAllocationSample 仅接受 bytes 注解/非负 weight，以 BigInteger 按记录内 class ID+名称聚合 2048 类，已保留类继续累加；搜索不改份额分母，零总权重不算百分比。缺字段/错误单位/预算遗漏/部分扫描必须可见。`capture-memory-demo.ps1` 仅启动独立 64 MiB SerialGC JVM，最多 256 MiB 累积分配/约 2 MiB 数组载荷、3 秒循环，允许在此子进程显式 GC 后自动退出。
 - 调研与决策见 `docs/research.md`、`docs/decisions.md`；自动检查汇总见 `docs/validation.md`，具体 GUI 证据按版本集中在 `docs/gui-validation.md`，不得从旧构建外推新包通过；使用方法见 `README.md`。
 - 不搬运竞品代码或资源；修改后运行相关测试、构建，并据实记录未验证项。
+- JFR Wait analysis 只转换 JavaMonitorEnter/JavaMonitorWait/ThreadPark，使用 eventThread；owner/notifier 是历史字段，class 不是锁实例，Park 不自动表示争用。共享 4096 事件/65536 帧引用/每栈 64 帧/4096 唯一帧/事件与符号各 1 Mi 字符预算；缺栈保留时长证据，BigInteger 累计，时长可跨线程重叠。筛选在 LOCAL_IO 上运行，generation 丢弃迟到结果，表格批量替换。普通虚拟线程 park 在某些 JDK 无 ThreadPark，不称全线程覆盖；脚本 `capture-waits-demo.ps1` 用独立有界子 JVM。不得在 IDE 测试宿主启动 JFR Recording。

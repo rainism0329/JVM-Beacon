@@ -1,6 +1,20 @@
-# GUI 验证记录：0.1.2—0.12.0
+# GUI 验证记录：0.1.2—0.13.0
 
 最近日期：**2026-09-28**，时区 Asia/Shanghai（UTC+08:00）。这是部分真实界面流程的观察记录，**不代表全部 GUI 验收通过**。自动测试、安装包及兼容性检查另见 [验证与接续状态](validation.md)。
+
+## 0.13.0：等待热点、事件与源码
+
+最终包 **15:47:10** 构建；**15:48:00.006—15:53:41.040** 运行于独立 IC 2025.1.3 / JBR 21 / Windows，1388×974、125%。实际加载 JAR 与 ZIP 内一致，runIde exit 0，ERROR 级日志 0；哈希及日志见 validation。下面均使用此最终会话截图，不采用前两次列宽候选截图。
+
+- 打开独立 fixture 的 waits.jfr，[库存](../build/reports/ui-0.13.0/inventory.png)为 15 events / 119,319 bytes / EOF；3 个 custom 探针只在库存中显示，等待分析严格只取标准 12 events。[Light 热点](../build/reports/ui-0.13.0/light.png)为 8 组，Sum/Max 的 ms 单位与计数表头可读。
+- 输入 beacon-wait，再 Enter 应用，[筛选](../build/reports/ui-0.13.0/filter.png)为 5 events / 5 hotspots。点击 Sum 列后[升序排序](../build/reports/ui-0.13.0/sorted.png)；选 142.229700 ms 的 Gate 组并按 Enter，下钻到 [beacon-wait-entrant 单事件](../build/reports/ui-0.13.0/drill.png)。排序后的 model/view 映射正确。
+- 双击事件打开[精确证据与栈](../build/reports/ui-0.13.0/event.png)：142,229,700 ns、实际起止、historical previousOwner=beacon-wait-owner，5 个 leaf-first 帧。选择 enterGate:48 后 Find source candidate，出现[类/descriptor/路径确认](../build/reports/ui-0.13.0/source-confirm.png)，确认后实际打开 [WaitRecordingFixture.java 第 48 行](../build/reports/ui-0.13.0/source-editor.png)。项目使用 Corretto 21 SDK 和当前 fixture 源码复制件，不保证业务录制源版本/loader 一致。
+- 切 IDEA 原生 [Dark](../build/reports/ui-0.13.0/dark.png)，主题与字体更新，无固定白分隔；[Coverage](../build/reports/ui-0.13.0/coverage.png)保留 active query/kind、当前文件窗口和各类遗漏统计。长报告可以滚动，不把未显示部分当作已逐行 GUI 验收。
+- 换成只有一个 custom 事件的合法 no-sampling.jfr，查询重置、新文件窗口更新，热点/事件清空，显示[明确无匹配状态](../build/reports/ui-0.13.0/empty.png)。再开自有 67 字节 invalid.jfr，显示 [IO 文件错误](../build/reports/ui-0.13.0/invalid.png)，等待页[清空并禁用报告/下钻/Inspect](../build/reports/ui-0.13.0/cleared.png)。原文件均未修改。
+
+候选修正是表格首轮默认宽度导致 kind/时长表头截断，随后调整列宽和简短 Sum 单位标题，再修正 Events 计数列；最终包重新构建、125 测试、IC/IU Verifier，并走通以上流程。当前尺寸直接可见约 4 行；部分名称与 Monitor entry 单元格仍可能省略，使用原生展开、调整列宽或详情读取。没有宣称所有尺寸/缩放都完整展示全文。
+
+未实操：完整 kind/搜索无匹配矩阵、剪贴板回读、全部对话框暗色/键盘/无障碍组合、限额大文件 GUI、IU GUI、虚拟线程其他 JDK 事件覆盖、旧远程录制全部按钮与长时间资源验收。缺栈、取消、迟到结果等按核心/组件测试层级报告。正常关闭的是本项目自有测试沙箱，未关闭日常 IDE。
 
 ## 0.12.0：GC 与分配压力
 
