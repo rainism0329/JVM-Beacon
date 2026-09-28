@@ -57,6 +57,11 @@ final class BeaconUi {
     }
 
     static JPanel panel(int gap) { return new JPanel(new BorderLayout(JBUI.scale(gap), JBUI.scale(gap))); }
+    static JPanel row(Component... items) {
+        JPanel panel = new JPanel(new WrapLayout()); panel.setOpaque(false);
+        for (Component item : items) panel.add(item);
+        return panel;
+    }
 
     static void metricCard(JPanel panel) {
         panel.setBackground(CANVAS);

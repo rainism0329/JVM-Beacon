@@ -1,8 +1,8 @@
 # JVM Beacon
 
-IDEA 原生的 JMX 管理与 JVM 运行时诊断工作台。当前开发版本为 **0.8.0**（2026-09-24）：核心流程无需云账号、外部 AI 或上传运行数据。[GitHub 源码仓库](https://github.com/rainism0329/JVM-Beacon) 为私有。本仓库尚未发布到 Marketplace；名称、plugin ID 和发布者信息仍属开发阶段。
+IDEA 原生的 JMX 管理与 JVM 运行时诊断工作台。当前开发版本为 **0.9.0**（2026-09-28）：核心流程无需云账号、外部 AI 或上传运行数据。[GitHub 源码仓库](https://github.com/rainism0329/JVM-Beacon) 为私有。本仓库尚未发布到 Marketplace；名称、plugin ID 和发布者信息仍属开发阶段。
 
-0.8.0 增加 **连接工作区**：远程配置保存、别名/分组/搜索、最近成功连接、每页显式重连与目标身份变化提示。保留 Lock chains、结构化 A/B 线程比较、v2 现场、Hot threads、多连接标签、Value explorer、`hostname:port`、MBean 数值追踪和受控方法调用。界面保持英文和原生主题。实际验收范围见 [验证记录](docs/validation.md) 和 [GUI 记录](docs/gui-validation.md)，仍是开发预览。
+0.9.0 增加 **Signal timeline**：CPU、heap、GC、平台线程共享时间轴与检查游标；冻结视图、选择稳定区间、比较端点、保存并离线重开。`.jvmb` v3 可保存最多 120 个已有指标样本，兼容读取 v1/v2。保留连接工作区、Lock chains、A/B 线程比较、Hot threads、多连接标签、Value explorer、`hostname:port`、MBean 数值追踪和受控方法调用。界面保持英文和原生主题。实际验收范围见 [验证记录](docs/validation.md) 和 [GUI 记录](docs/gui-validation.md)，仍是开发预览。
 
 第一次测试可按下方顺序操作：**安装 → 启动测试 JVM → 单连接流程 → 双连接标签页**。完整验收清单、预期结果和排错见 [测试指南](docs/testing.md)。文档中的待执行步骤不代表已经验收通过。
 
@@ -12,7 +12,7 @@ IDEA 原生的 JMX 管理与 JVM 运行时诊断工作台。当前开发版本�
 
 本轮开发与兼容性检查目标是 **IntelliJ IDEA Community / Ultimate 2025.1.3，IC/IU-251.26927.53，JBR 21，Windows**。Community 使用官方完整发行包；被监控测试程序使用 JDK 21。描述符允许的版本范围不等于全部版本均已实测，兼容性检查也不代替 GUI 验收。
 
-1. 在 IDEA 的 **Settings → Plugins → 齿轮 → Install Plugin from Disk…** 选择 [jvm-beacon-0.8.0.zip](build/distributions/jvm-beacon-0.8.0.zip)，按 IDE 提示重新启动；最终包验证状态见上方记录。
+1. 在 IDEA 的 **Settings → Plugins → 齿轮 → Install Plugin from Disk…** 选择 [jvm-beacon-0.9.0.zip](build/distributions/jvm-beacon-0.9.0.zip)，按 IDE 提示重新启动；最终包验证状态见上方记录。
 2. 打开项目，通过 **View → Tool Windows → JVM Beacon** 打开底部工具窗口。
 3. 点击 **Connect JVM…**，选择当前用户可见的本地 Java 进程，或输入 PID。若该进程尚未开启本地管理端点，需要明确勾选 **Allow starting the local management agent if needed**；这会改变目标进程状态。
 4. 连接成功后核对顶部的目标身份和启动时间。默认开启观察模式，自动采样关闭；可在“Telemetry”手动采样或开启每 2 秒采样。
@@ -65,6 +65,23 @@ $env:JAVA_HOME = 'C:\Users\lenovo\.jdks\corretto-21.0.9'
 
 默认 `run-fixture.ps1` **不设定时退出**，0.6.1 起需在终端输入 `quit` 再 Enter 才退出，单按 Enter 被忽略；终端关闭/输入流关闭也会结束 fixture，并打印原因。旧脚本单按 Enter 就退出，容易导致下一次采样变 Stale。若使用 `-DurationSeconds` 则到期结束，CPU 演示线程自己的 120 秒上限不代表整个 JVM 一定同时结束。重新启动 fixture 后一定按新输出 PID 连接；首次还需允许启动本地管理代理。
 
+## 多指标时间线与区间保存
+
+1. 连接自有 fixture 后进入 **Timeline → Start live**，四条信号随现有 2 秒采样更新；**Pause live** 暂停采样。移动鼠标或使用 **Inspect #**，四条轨道共享游标，底部显示原始精确值和实际读取窗口。图表内存单位为 MiB，精确值仍为 bytes。
+2. 点击 **Freeze & select**，冻结当时最近最多 120 个样本。冻结只固定视图，已开启的采样仍可继续。使用 **From # / to #** 选择样本序号，进入 **Interval comparison** 查看首尾值与差值。**Follow latest** 返回当前保留的历史；更早的样本不会补回。
+3. 在 **Snapshots** 填写备注后返回 Timeline，选择 **Save interval…** 保存选中的指标区间、目标身份与备注；不附带可能属于其他时段的线程。**Snapshots → Save snapshot…** 则保存当前保留的全部指标历史和一份单独采集的线程快照。
+4. **Open capture…** 打开 `.jvmb` 后关闭本页实时连接，以 OFFLINE 展示已保存数据。多样本文件自动进入 Timeline，仍可选择更小区间另存。旧 v1/v2 只有当时保存的单个指标点，不能恢复过去趋势；0.8.x 及更旧插件不能读取 v3。
+
+GC 曲线是近似累计采集时间之和，不是暂停事件或暂停总占比。CPU 是目标 JVM 报告的近期全 CPU 负载，不代表恰好这两秒的平均值。端点差值不是速率或根因；缺失/单位变化/时窗无效会抑制比较，GC 计数回退也不输出差值。间隔超过 5 秒或时钟倒退断线，保留真实零与缺失区别。所有样本按采集顺序保留，读取并非原子操作；不覆盖虚拟线程。
+
+快速生成一份真实且含采样空档的离线示例：
+
+```powershell
+.\scripts\capture-timeline-demo.ps1 -JdkHome 'C:\Users\lenovo\.jdks\corretto-21.0.9'
+```
+
+约 15 秒后输出 `TIMELINE_CAPTURE_PASS`；打开输出目录中的 `timeline.jvmb`（8 点）或 `interval.jvmb`（选出的 4 点）。脚本只启动自己的认证 loopback fixture，使用 observer 读取，并在结束时清理。完整手工流程与验收边界见 [时间线测试](docs/testing.md#多指标时间线与采集区间090)。每页历史 120 点，冻结最多额外保留 120 点，文件上限仍为 5 MiB；不自动写磁盘或上传。保存前检查备注等敏感文本。
+
 ## 排查锁等待与比较线程
 
 先排查锁等待可用 **Threads → Lock chains → Capture threads**。左侧按名称、ID、状态或 owner 筛选；选中等待者后，右侧按 `waiter → owner → …` 展示链路，点任一成员阅读其栈，再选帧 **Go to source**。所有筛选/选择只读已采集的数据，不会重新调用目标。
@@ -75,7 +92,7 @@ $env:JAVA_HOME = 'C:\Users\lenovo\.jdks\corretto-21.0.9'
 
 想快速体验离线锁链/比较，可运行 `./scripts/capture-lock-demo.ps1 -JdkHome '<JDK21目录>'`。脚本自动启动一个认证 loopback 测试 JVM，采集真实竞争 A、主动释放后采集 B，校验变化后关闭该 JVM；结果保存在新建的 `build/examples/locks-时间戳/`。看到 `LOCK_CAPTURE_PASS` 后，在插件中打开 `locks-B.jvmb`，再 Compare with file 选择同目录 `locks-A.jvmb`。不需要抢在手动 fixture 的截止时间前操作。
 
-锁边按 owner ID 建立，同名不连边；`No owner reported` 不等于没有锁，未采到 owner 不等于线程已退出。JVM 死锁查询与链路中观察到的环单独解释。最多处理 512 个平台线程、每栈 64 帧、每条链 64 个成员；不覆盖虚拟线程，不推断两次采样间持续阻塞。`.jvmb` v2 保存 owner ID，读取 v1 时标为未采集；0.6.x 不能打开 v2。比较报告、Hot threads 和趋势本轮仍不随现场保存，可保存 A/B 两个现场后重新比较；栈仅持久化类/方法/文件/行，不含 module/class-loader 元数据。
+锁边按 owner ID 建立，同名不连边；`No owner reported` 不等于没有锁，未采到 owner 不等于线程已退出。JVM 死锁查询与链路中观察到的环单独解释。最多处理 512 个平台线程、每栈 64 帧、每条链 64 个成员；不覆盖虚拟线程，不推断两次采样间持续阻塞。`.jvmb` v2/v3 保存 owner ID，读取 v1 时标为未采集；0.6.x 不能打开 v2。比较报告、Hot threads 和任意 MBean 属性追踪不随现场保存，可保存 A/B 两个现场后重新比较；栈仅持久化类/方法/文件/行，不含 module/class-loader 元数据。0.9.0 起普通 JVM 指标历史随 v3 现场保存。
 
 ## 测量 CPU 活跃线程
 
@@ -122,7 +139,7 @@ $env:JAVA_HOME = 'C:\Users\lenovo\.jdks\corretto-21.0.9'
 
 指标时间窗口表示客户端读取的起止时间。MBean 读取和操作结果也显示后台实际采集窗口，多属性逐项读取并非原子快照。`ProcessCpuLoad` 的近期负载由目标 JVM 计算，其内部统计窗口不等于插件的 2 秒轮询间隔；GC 次数/时间、进程 CPU 时间为累计量。
 
-现场格式只保存目标标识、一次已采集的指标、一次平台线程快照和备注，并保留各自采集窗口与缺失信息。它不保存任意 MBean 值、通知、连接 URL、凭据、命令行或整个趋势历史。**目标标识、线程名、栈、锁信息和备注不自动脱敏**，分享前请自行审查。
+v3 现场格式保存目标标识、最多 120 个保留的指标样本、一份平台线程快照和备注，并保留各自采集窗口与缺失信息；区间另存不带线程。它不保存任意 MBean 值、通知、连接 URL、凭据、命令行或已丢弃/未采集的历史。**目标标识、线程名、栈、锁信息和备注不自动脱敏**，分享前请自行审查。
 
 ## 阅读复杂 MBean 结果
 

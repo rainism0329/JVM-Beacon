@@ -15,15 +15,25 @@ public final class SnapshotStore {
     public static final int MAX_BYTES = 5 * 1_024 * 1_024;
     public static final String REDACTION_NOTICE = "Export includes JVM identity, metric values, thread names/locks/class and source-file names, and your notes. It excludes connection URLs, credentials, system properties, command-line arguments, arbitrary MBean values and notifications. Thread names and notes can contain sensitive text and are not automatically redacted; review before sharing.";
 
-    public record Snapshot(Identity identity, Sample sample, ThreadDump threads, String notes) {
-        public Snapshot { Objects.requireNonNull(identity, "identity"); notes = notes == null ? "" : notes; }
+    public record Snapshot(Identity identity, Sample sample, ThreadDump threads, String notes, List<Sample> history) {
+        public Snapshot {
+            Objects.requireNonNull(identity, "identity"); notes = notes == null ? "" : notes;
+            history = List.copyOf(history);
+            if (history.size() > CaptureTimeline.LIMIT) throw new IllegalArgumentException("At most 120 metric samples can be saved.");
+            if (sample == null ? !history.isEmpty() : history.isEmpty() || !sample.equals(history.getLast()))
+                throw new IllegalArgumentException("The current sample must be the last captured history entry.");
+        }
+        public Snapshot(Identity identity, Sample sample, ThreadDump threads, String notes) {
+            this(identity, sample, threads, notes, sample == null ? List.of() : List.of(sample));
+        }
         public long captureStart() {
-            if (sample == null) return threads == null ? 0 : threads.captureStart();
-            return threads == null ? sample.captureStart() : Math.min(sample.captureStart(), threads.captureStart());
+            long start = history.stream().mapToLong(Sample::captureStart).min().orElse(Long.MAX_VALUE);
+            if (threads != null) start = Math.min(start, threads.captureStart());
+            return start == Long.MAX_VALUE ? 0 : start;
         }
         public long captureEnd() {
-            if (sample == null) return threads == null ? 0 : threads.captureEnd();
-            return threads == null ? sample.captureEnd() : Math.max(sample.captureEnd(), threads.captureEnd());
+            long end = history.stream().mapToLong(Sample::captureEnd).max().orElse(0);
+            return threads == null ? end : Math.max(end, threads.captureEnd());
         }
         public String redactionNotice() { return REDACTION_NOTICE; }
     }
@@ -33,7 +43,7 @@ public final class SnapshotStore {
     public static void save(Path path, Snapshot snapshot) throws IOException {
         Properties data = encode(snapshot);
         StringWriter text = new StringWriter();
-        data.store(text, "JVM Beacon snapshot version 2; UTF-8; captured evidence, not continuous history");
+        data.store(text, "JVM Beacon snapshot version 3; UTF-8; bounded observations, not continuous recording");
         byte[] bytes = text.toString().getBytes(StandardCharsets.UTF_8);
         if (bytes.length > MAX_BYTES) throw new IOException("Snapshot exceeds 5 MiB. Shorten notes or collect a smaller capture.");
         Path destination = path.toAbsolutePath().normalize();
@@ -64,20 +74,27 @@ public final class SnapshotStore {
                 StandardCharsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT).onUnmappableCharacter(CodingErrorAction.REPORT))) {
             data.load(reader);
             String version = required(data, "format.version", 16);
-            if (!Set.of("1", "2").contains(version)) throw new IOException("Unsupported snapshot version. Versions 1 and 2 can be opened.");
+            if (!Set.of("1", "2", "3").contains(version)) throw new IOException("Unsupported snapshot version. Versions 1, 2 and 3 can be opened.");
             if (!"jvm-beacon".equals(required(data, "format.kind", 32))) throw new IOException("This file is not a JVM Beacon snapshot.");
             Identity identity = new Identity(required(data, "identity.runtime", 1_024), nonnegative(data, "identity.start"),
                     required(data, "identity.vm", 1_024), required(data, "identity.version", 1_024));
-            Sample sample = bool(data, "sample.present") ? readSample(data) : null;
+            Sample sample = bool(data, "sample.present") ? readSample(data, "sample") : null;
+            List<Sample> history = new ArrayList<>();
+            if (version.equals("3")) {
+                int count = readCount(data, "history.count", CaptureTimeline.LIMIT - 1);
+                if (sample == null && count != 0) throw new IOException("History requires a current metric sample.");
+                for (int i = 0; i < count; i++) history.add(readSample(data, "history." + i));
+            }
+            if (sample != null) history.add(sample);
             ThreadDump threads = bool(data, "threads.present") ? readThreads(data, version) : null;
-            return new Snapshot(identity, sample, threads, required(data, "notes", 32_768));
+            return new Snapshot(identity, sample, threads, required(data, "notes", 32_768), history);
         } catch (IllegalArgumentException e) { throw new IOException("Invalid snapshot: " + e.getMessage(), e); }
     }
 
     private static Properties encode(Snapshot snapshot) throws IOException {
         Objects.requireNonNull(snapshot, "snapshot");
         Properties data = new Properties();
-        put(data, "format.version", "2", 16); put(data, "format.kind", "jvm-beacon", 32);
+        put(data, "format.version", "3", 16); put(data, "format.kind", "jvm-beacon", 32);
         put(data, "identity.runtime", snapshot.identity.runtimeName(), 1_024);
         number(data, "identity.start", snapshot.identity.startTime());
         put(data, "identity.vm", snapshot.identity.vmName(), 1_024);
@@ -89,23 +106,10 @@ public final class SnapshotStore {
         data.setProperty("threads.present", String.valueOf(snapshot.threads != null));
         if (snapshot.sample == null) data.setProperty("sample.missing", "No metric sample was captured.");
         if (snapshot.threads == null) data.setProperty("threads.missing", "No thread capture was collected.");
-        if (snapshot.sample != null) {
-            Sample sample = snapshot.sample;
-            window(data, "sample", sample.captureStart(), sample.captureEnd());
-            put(data, "sample.source", sample.source(), 1_024);
-            count(data, "sample.count", sample.metrics().size(), 64);
-            for (int i = 0; i < sample.metrics().size(); i++) {
-                Metric metric = sample.metrics().get(i);
-                String prefix = "sample." + i + ".";
-                put(data, prefix + "key", metric.key(), 128); put(data, prefix + "label", metric.label(), 512); put(data, prefix + "unit", metric.unit(), 64);
-                data.setProperty(prefix + "present", String.valueOf(metric.available()));
-                if (metric.available()) {
-                    if (!Double.isFinite(metric.value().doubleValue())) throw new IOException("A metric contains a non-finite value.");
-                    checkedDecimal(metric.value().toString());
-                    put(data, prefix + "value", metric.value().toString(), 128);
-                } else put(data, prefix + "error", metric.error() == null ? "Unavailable; no value was captured." : metric.error(), 2_048);
-            }
-        }
+        if (snapshot.sample != null) writeSample(data, "sample", snapshot.sample);
+        int previous = Math.max(0, snapshot.history.size() - 1);
+        count(data, "history.count", previous, CaptureTimeline.LIMIT - 1);
+        for (int i = 0; i < previous; i++) writeSample(data, "history." + i, snapshot.history.get(i));
         if (snapshot.threads != null) {
             ThreadDump dump = snapshot.threads;
             window(data, "threads", dump.captureStart(), dump.captureEnd());
@@ -137,13 +141,32 @@ public final class SnapshotStore {
         return data;
     }
 
-    private static Sample readSample(Properties data) throws IOException {
-        long[] window = readWindow(data, "sample");
-        int count = readCount(data, "sample.count", 64);
+    private static void writeSample(Properties data, String base, Sample sample) throws IOException {
+        window(data, base, sample.captureStart(), sample.captureEnd());
+        put(data, base + ".source", sample.source(), 1_024);
+        count(data, base + ".count", sample.metrics().size(), 64);
+        Set<String> keys = new HashSet<>();
+        for (int i = 0; i < sample.metrics().size(); i++) {
+            Metric metric = sample.metrics().get(i);
+            if (!keys.add(metric.key())) throw new IOException("Duplicate metric key.");
+            String prefix = base + "." + i + ".";
+            put(data, prefix + "key", metric.key(), 128); put(data, prefix + "label", metric.label(), 512); put(data, prefix + "unit", metric.unit(), 64);
+            data.setProperty(prefix + "present", String.valueOf(metric.available()));
+            if (metric.available()) {
+                if (!Double.isFinite(metric.value().doubleValue())) throw new IOException("A metric contains a non-finite value.");
+                checkedDecimal(metric.value().toString());
+                put(data, prefix + "value", metric.value().toString(), 128);
+            } else put(data, prefix + "error", metric.error() == null ? "Unavailable; no value was captured." : metric.error(), 2_048);
+        }
+    }
+
+    private static Sample readSample(Properties data, String base) throws IOException {
+        long[] window = readWindow(data, base);
+        int count = readCount(data, base + ".count", 64);
         List<Metric> metrics = new ArrayList<>();
         Set<String> keys = new HashSet<>();
         for (int i = 0; i < count; i++) {
-            String prefix = "sample." + i + ".";
+            String prefix = base + "." + i + ".";
             String key = required(data, prefix + "key", 128);
             if (!keys.add(key)) throw new IOException("Duplicate metric key.");
             String label = required(data, prefix + "label", 512), unit = required(data, prefix + "unit", 64);
@@ -179,7 +202,7 @@ public final class SnapshotStore {
                 frames.add(new StackTraceElement(required(data, stack + "class", 2_048), required(data, stack + "method", 1_024), file.isEmpty() ? null : file, line));
             }
             Long ownerId = null;
-            if (version.equals("2") && bool(data, prefix + "ownerId.present")) {
+            if (!version.equals("1") && bool(data, prefix + "ownerId.present")) {
                 ownerId = Long.parseLong(required(data, prefix + "ownerId", 24));
                 if (ownerId == 0 || ownerId < -1) throw new IOException("Invalid lock owner ID.");
             }
@@ -203,6 +226,7 @@ public final class SnapshotStore {
         else result.append("Different runtime labels: captures may be from different targets. Thread IDs and cumulative deltas are not compared.\n");
         result.append("Before capture: ").append(before.captureStart()).append(" – ").append(before.captureEnd()).append(" epoch ms\n");
         result.append("After capture: ").append(after.captureStart()).append(" – ").append(after.captureEnd()).append(" epoch ms\n");
+        result.append("Metric comparison uses each capture's last acquired sample. Inspect earlier observations in Timeline.\n");
         if (before.sample == null || after.sample == null) result.append("Metrics: missing in at least one snapshot.\n");
         else {
             Map<String, Metric> baseline = before.sample.metrics().stream().collect(Collectors.toMap(Metric::key, metric -> metric));

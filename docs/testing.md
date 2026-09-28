@@ -144,3 +144,24 @@ $beaconIde = 'D:\IdeaProjects\JVM-Beacon\.intellijPlatform\ides\community-2025.1
 | 打包提示 JAR 被占用 | 只关闭本项目 runIde 开发沙箱，然后重试；无需关闭日常 IDEA。 |
 
 反馈问题时记录插件/IDE/JDK 版本、Local/Remote、页编号、目标 PID/启动时间、操作顺序、预期/实际、窗口内错误分类和采集时间。截图或日志分享前移除凭据及敏感目标数据，不附密码或完整业务现场。
+
+## 多指标时间线与采集区间（0.9.0）
+
+本节是可执行步骤，实际跑过的范围以 validation / gui-validation 为准。
+
+1. 安装 0.9.0，运行 `scripts/run-fixture.ps1`，只连接这次输出的 PID。Telemetry 有一个初始点。进入 Timeline，四轨应为单点或明确不可用，不能显示伪造折线。
+2. Timeline → Start live，等待至少 12 秒；四轨横轴相同，Inspect # 或悬停任意轨道应同步游标，底部保留精确原值和起止时窗。CPU 无变化不是采样未执行，以样本数/时窗判断。Pause live 后至少等 6 秒再启动，应断线而不填补空档。
+3. Freeze & select，记下当前点数/起止时刻；From # / to # 选中间至少 3 点。持续采样再等 10 秒，选择与比较结果不能漂移；Follow latest 后才回到最新缓冲。采样期间切换连接标签会暂停该页自动采集。
+4. Interval comparison 查看四行 First / Last / Change / Evidence。单位是源单位，CPU 差为百分点。缺失/时窗异常/GC 回退的自动测试见 CaptureTimelineTest；不要为了制造这些状态修改未知进程。用 Inspect # 键盘箭头验证无需鼠标可读值。
+5. 可先去 Snapshots 填备注，再 Timeline → Save interval… 另存新文件。区间只含指标/身份/备注，不含线程。Open capture… 打开文件后应进入 OFFLINE、关闭本页实时连接、只显示选中的点数和原时间；还可选择更小区间另存。换新目标后旧冻结区间必须清除。
+6. Snapshots → Save snapshot… 保存最近保留的全部点及单独采集的线程；重开应在 Timeline / Threads 各自标时间。Compare with file 的指标比较仍针对每个文件最后一次采集的点，不混淆为整个历史的统计比较。旧 v1/v2 只恢复原有一个样本，v3 不能交给 0.8.x 打开。
+7. Light / Dark、缩放、窄工具窗检查：轨道可以滚动，原生主题不应出现固定白色分隔；标题、控件、比较表可读，无样本和断开状态明确。关闭连接页/项目时没有新增独立采样器需要清理。
+
+无需手动抢时间的真实演示：
+
+```powershell
+$env:JAVA_HOME = 'C:\Users\lenovo\.jdks\corretto-21.0.9'
+.\scripts\capture-timeline-demo.ps1
+```
+
+约 15 秒，自有认证 loopback fixture 以 observer 读取 8 次，其中主动等 6 秒制造空档；保留原始读值，未人为伪造数据。输出 `TIMELINE_CAPTURE_PASS` 和新时间戳目录，其中 `timeline.jvmb` 为 8 点、`interval.jvmb` 为第 3–6 点、`evidence.txt` 为窗口和大小。finally 清理连接和子 JVM。不测试用户业务进程、不修改权限/TLS、不启用 CPU/争用监控。文件上限 5 MiB、采样上限 120、GC 近似累计值和平台线程边界不变。

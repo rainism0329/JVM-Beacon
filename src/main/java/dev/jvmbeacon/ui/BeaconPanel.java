@@ -95,6 +95,8 @@ public final class BeaconPanel extends JPanel implements Disposable {
     private final JLabel sampleWindow = new JLabel("No samples · Source: standard Management MXBeans");
     private final JComboBox<MetricChoice> trendMetric = new JComboBox<>();
     private final TrendChart chart = new TrendChart(this::metricTrend);
+    private final TimelinePanel timeline;
+    private final JButton timelineLive = new JButton("Start live");
     private final Deque<JmxClient.Sample> history = new ArrayDeque<>();
     private final JTextArea trendInfo = textArea("No samples", 3);
     private final JButton startTrend = new JButton("Start live trend");
@@ -158,6 +160,15 @@ public final class BeaconPanel extends JPanel implements Disposable {
     public BeaconPanel(Project project) {
         super(new BorderLayout());
         this.project = project;
+        liveActions.add(timelineLive);
+        timelineLive.addActionListener(e -> {
+            autoSample.setSelected(!autoSample.isSelected()); updateSamplingTimer();
+            if (autoSample.isSelected() && !runner.isBusy()) sampleNow(false);
+            refreshSamplingPresentation();
+        });
+        timeline = new TimelinePanel(liveButton("Sample now", () -> sampleNow(true)),
+                timelineLive,
+                () -> openSnapshot(false), this::saveInterval);
         hotThreads = new HotThreadsPanel(project, this, this::captureHotThreads, this::status);
         lockChains = new LockChainsPanel(project, liveButton("Capture threads", this::captureThreads), frame -> SourceNavigator.navigate(project, this, frame, this::status));
         pinThreads.addActionListener(e -> pinThreadBaseline());
@@ -195,6 +206,7 @@ public final class BeaconPanel extends JPanel implements Disposable {
         pages.addTab("MBeans", mbeanPage());
         pages.addTab("Threads", threadsPage());
         pages.addTab("Snapshots", snapshotPage());
+        pages.addTab("Timeline", timeline);
         add(pages, BorderLayout.CENTER);
         status.setRows(2); status.setLineWrap(true); status.setWrapStyleWord(true);
         status.setBackground(BeaconUi.SURFACE); status.setForeground(BeaconUi.MUTED);
@@ -483,7 +495,7 @@ public final class BeaconPanel extends JPanel implements Disposable {
             connectionState.setText("CONNECTING");
             status("Connecting · " + stage + " · " + Math.max(0, (System.nanoTime() - connectStarted) / 1_000_000_000) + " / 20 s · Stop waiting cancels UI waiting, not necessarily the underlying call.");
         }
-        String mode = offline ? "OFFLINE · This file contains one sample, not a trend history."
+        String mode = offline ? "OFFLINE · Reading " + history.size() + " saved metric samples."
                 : client == null ? "DISCONNECTED · Captured history is no longer updating."
                 : !autoSample.isSelected() ? "PAUSED · Auto is off. Choose Start live trend or Sample now."
                 : !isShowing() ? "PAUSED · This connection tab is hidden."
@@ -493,6 +505,8 @@ public final class BeaconPanel extends JPanel implements Disposable {
                 + (System.currentTimeMillis() < sample.captureEnd() ? "Client clock precedes capture" : (System.currentTimeMillis() - sample.captureEnd()) / 1000 + " s ago");
         String text = mode + "\n" + age + "\n" + history.size() + " / 120 samples · Missing values or gaps > 5 s break the line.";
         if (!text.equals(trendInfo.getText())) { trendInfo.setText(text); trendInfo.setCaretPosition(0); }
+        timeline.sampling(mode);
+        timelineLive.setText(autoSample.isSelected() ? "Pause live" : "Start live");
         startTrend.setVisible(client != null && !autoSample.isSelected() && !offline);
         String notice = connectionProblem == null ? Objects.requireNonNullElse(identityNotice, "") : connectionProblem;
         if (!notice.equals(connectionNotice.getText())) { connectionNotice.setText(notice); connectionNotice.setCaretPosition(0); }
@@ -735,7 +749,7 @@ public final class BeaconPanel extends JPanel implements Disposable {
             resetThreadComparison();
             watchTarget = null; watching = false; watchGeneration++; watchSeries.clear(); renderWatch();
             dump = null; threadModel.clear(); frameModel.clear(); notes.setText(""); clearBeans();
-            observe.setSelected(true); history.clear(); trendMetric.removeAllItems();
+            observe.setSelected(true); history.clear(); timeline.reset(); trendMetric.removeAllItems();
             objectNames = result.names(); filterBeans();
             beanCount.setToolTipText(result.truncated() ? "The MBean directory reached its limit and was truncated." : "Results from this directory query");
             showSample(result.sample()); showThreads(null); updateActions();
@@ -818,6 +832,7 @@ public final class BeaconPanel extends JPanel implements Disposable {
         ((CardLayout) overviewBody.getLayout()).show(overviewBody, identity == null ? "welcome" : "data");
         if (value == null) {
             sampleWindow.setText("No metrics were captured in this snapshot"); history.clear(); trendMetric.removeAllItems();
+            timeline.update(List.of(), offline);
             trendInfo.setText("0 / 120 samples · No metrics in this snapshot; no trend history can be recovered.");
             chart.repaint(); updateSnapshotSummary(); return;
         }
@@ -829,6 +844,7 @@ public final class BeaconPanel extends JPanel implements Disposable {
         }
         sampleWindow.setText("Capture window: " + window(value.captureStart(), value.captureEnd()) + " · Source: standard MXBeans");
         history.addLast(value); while (history.size() > 120) history.removeFirst();
+        timeline.update(new ArrayList<>(history), offline);
         if (client != null) connectionProblem = null;
         refreshSamplingPresentation();
         chart.repaint(); updateSnapshotSummary();
@@ -1092,7 +1108,20 @@ public final class BeaconPanel extends JPanel implements Disposable {
         SourceNavigator.navigate(project, this, selected, this::status);
     }
 
-    private SnapshotStore.Snapshot currentSnapshot() { return new SnapshotStore.Snapshot(identity, sample, dump, notes.getText()); }
+    private SnapshotStore.Snapshot currentSnapshot() { return new SnapshotStore.Snapshot(identity, sample, dump, notes.getText(), new ArrayList<>(history)); }
+
+    private void saveInterval(List<JmxClient.Sample> selected) {
+        if (identity == null || selected.isEmpty()) return;
+        if (runner.isBusy()) { status("A request is running. The frozen interval is retained; save when it finishes."); return; }
+        SnapshotStore.Snapshot capture = new SnapshotStore.Snapshot(identity, selected.getLast(), null, notes.getText(), selected);
+        var file = FileChooserFactory.getInstance().createSaveFileDialog(new FileSaverDescriptor("Save captured timeline interval",
+                "Includes selected metrics, target identity and notes. No threads, credentials or MBean values. Review notes before sharing.", "jvmb"), project)
+                .save((com.intellij.openapi.vfs.VirtualFile) null, "jvm-beacon-interval-" + System.currentTimeMillis() + ".jvmb");
+        if (file == null) return;
+        Path path = file.getFile().toPath();
+        background("Save timeline interval", false, () -> { SnapshotStore.save(path, capture); return path; },
+                saved -> status("Saved " + capture.history().size() + " captured samples: " + saved + ". Open this file to inspect the interval offline."));
+    }
 
     private void saveSnapshot() {
         if (identity == null || (sample == null && dump == null)) { status("Capture metrics or threads from a connected JVM, or open an existing snapshot first."); return; }
@@ -1131,13 +1160,14 @@ public final class BeaconPanel extends JPanel implements Disposable {
                     status("Results are retained in Comparison and Threads → Compare. Different windows or targets cannot be assumed to represent deltas from the same process.");
                 });
             } else background("Load snapshot", false, () -> SnapshotStore.load(path), loaded -> {
-                releaseSession(); offline = true; identity = loaded.identity(); history.clear(); trendMetric.removeAllItems();
+                releaseSession(); offline = true; identity = loaded.identity(); history.clear(); timeline.reset(); trendMetric.removeAllItems();
+                if (!loaded.history().isEmpty()) history.addAll(loaded.history().subList(0, loaded.history().size() - 1));
                 connectionProblem = null; identityNotice = null; lastTarget = null;
                 hotThreads.clear();
                 resetThreadComparison();
                 watchTarget = null; watchSeries.clear(); renderWatch();
                 clearBeans(); notes.setText(loaded.notes()); showSample(loaded.sample()); showThreads(loaded.threads());
-                updateActions(); snapshotViews.setSelectedIndex(0); pages.setSelectedIndex(3); status("Offline snapshot opened; the live connection is closed. Data absent from the file cannot be recovered.");
+                updateActions(); snapshotViews.setSelectedIndex(0); pages.setSelectedIndex(loaded.history().size() > 1 ? 4 : 3); status("Offline snapshot opened; the live connection is closed. Data absent from the file cannot be recovered.");
             });
         });
     }
@@ -1160,8 +1190,9 @@ public final class BeaconPanel extends JPanel implements Disposable {
                 + "\nThread coverage: " + (dump == null ? "Not captured" : dump.coverage())
                 + "\nThis format does not export arbitrary MBean attributes, operation results, notifications, credentials or heap contents."
                 + "\nTarget identity, thread names, stacks, locks and notes are not automatically redacted. Review the file before sharing."
-                + "\nRetention: one metric sample and one thread snapshot at save time. Full trend history is not included."
-                + "\n\nInspect captured data in Telemetry and Threads.");
+                + "\nRetention: " + history.size() + " metric samples (maximum 120) and one separately captured thread snapshot. Only retained observations are saved."
+                + "\nTimeline → Freeze & select → Save interval exports selected metrics and notes without threads. Older data and pauses cannot be recovered."
+                + "\n\nInspect captured data in Telemetry, Timeline and Threads.");
         snapshotText.setCaretPosition(0);
     }
 

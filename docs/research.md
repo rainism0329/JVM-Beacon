@@ -136,3 +136,12 @@
 - **官方 SDK 文档，实际访问**：[Persisting Sensitive Data](https://plugins.jetbrains.com/docs/intellij/persisting-sensitive-data.html)，页面日期 2026-07-30。PasswordSafe get/set 可能阻塞，不能放 EDT；用户名等元数据与密码分别管理。文档还指出 2025.3 之前 Remote Development 后端存在明文存储边界；本项目实际目标仅 Windows 桌面 2025.1.3，不承诺该远程开发部署的凭据保护。
 - **官方 CLI 文档，实际访问**：[gh repo create](https://cli.github.com/manual/gh_repo_create)，核对 private/source/remote/push。用户明确指定现有账号和私有仓库后，使用现有 gh keyring 登录，创建并推送 rainism0329/JVM-Beacon；未新建令牌、公开仓库或发布 Release。CLI 查询 isPrivate=true 属实际运行证据。
 - **本项目判断**：远程命名配置、最近成功项和显式重连有望减少重复输入；没有外部用户量化研究。真实认证 JMX 重连、XML 序列化及迟到结果测试分别提供技术证据，不能据此声称所有网络拓扑或密码 GUI 均通过。
+
+## 时间线语义补查（2026-09-28，0.9.0）
+
+证据类型：本日实际访问的 JDK 21 官方 API；适用语义为被测 JDK 21，不代替其他 VM/版本实测。无代码或界面资源复用。
+
+- [OperatingSystemMXBean.getProcessCpuLoad](https://docs.oracle.com/en/java/javase/21/docs/api/jdk.management/com/sun/management/OperatingSystemMXBean.html#getProcessCpuLoad())：近期进程 CPU 使用，范围 0–1（插件乘 100），包含 JVM 内部和应用线程；1 表示所有 CPU 全时用于该 JVM，负值表示不可用。官方未把时间窗固定为客户端采样周期。因此 UI 标近期报告负载，端点差是百分点，不按此计算累计 CPU 时间。
+- [GarbageCollectorMXBean.getCollectionTime](https://docs.oracle.com/en/java/javase/21/docs/api/java.management/java/lang/management/GarbageCollectorMXBean.html#getCollectionTime())：近似累计采集经过时间，单位 ms，未知为 -1；即使次数增加，时间也可能因精度保持不变。插件现有采集按 collector 求和。因此曲线保留累计意义，不把其差值声称为暂停总时长、暂停百分比或根因。计数回退可能来自重置/collector 变化，仅作不确定性说明。
+
+产品判断（推断，待用户验证）：四轨共享采集窗口和检查游标能减少反复切换单指标的步骤；区间保留可帮助复盘实际看到的变化。它不代替 JFR 的事件级证据，也不保证更高诊断准确率。

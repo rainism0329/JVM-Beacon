@@ -26,7 +26,7 @@ class SnapshotStoreTest {
         assertEquals("中文备注", loaded.notes());
         assertEquals(42, loaded.threads().threads().getFirst().frames().getFirst().getLineNumber());
         assertNull(loaded.sample().metrics().get(1).value());
-        assertTrue(Files.readString(file).contains("format.version=2"));
+        assertTrue(Files.readString(file).contains("format.version=3"));
         assertEquals(200, loaded.captureStart()); assertEquals(220, loaded.captureEnd());
     }
     @Test void missingCapturesRemainMissing() throws Exception {
@@ -42,7 +42,9 @@ class SnapshotStoreTest {
                 LockChainsTest.thread(1, 2L), LockChainsTest.thread(2, -1L), LockChainsTest.thread(3, null))), "locks");
         SnapshotStore.save(file, original);
         assertEquals(original, SnapshotStore.load(file));
-        String versionTwo = Files.readString(file);
+        String versionTwo = Files.readString(file).replace("format.version=3", "format.version=2");
+        Files.writeString(file, versionTwo);
+        assertEquals(original, SnapshotStore.load(file));
         Files.writeString(file, versionTwo.replace("format.version=2", "format.version=1").replaceAll("(?m)^threads\\.[0-9]+\\.ownerId[^\\r\\n]*\\r?\\n", ""));
         var legacy = SnapshotStore.load(file);
         assertTrue(legacy.threads().threads().stream().allMatch(t -> t.lockOwnerId() == null));
@@ -59,7 +61,7 @@ class SnapshotStoreTest {
     @Test void rejectsUnknownVersionDuplicatesCountsAndOversizedFiles() throws Exception {
         Path file = directory.resolve("bad.beacon"); SnapshotStore.save(file, capture());
         String valid = Files.readString(file);
-        Files.writeString(file, valid.replace("format.version=2", "format.version=999"));
+        Files.writeString(file, valid.replace("format.version=3", "format.version=999"));
         assertThrows(IOException.class, () -> SnapshotStore.load(file));
         Files.writeString(file, valid + "\nformat.version=1\n");
         assertThrows(IOException.class, () -> SnapshotStore.load(file));

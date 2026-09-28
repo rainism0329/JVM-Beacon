@@ -7,7 +7,10 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class TrendSeriesTest {
     private static JmxClient.Sample sample(long end, Number value) {
-        return new JmxClient.Sample(end, end, List.of(new JmxClient.Metric("x", "x", value, "bytes", value == null ? "Denied" : null)));
+        return sample(end, value, "bytes");
+    }
+    private static JmxClient.Sample sample(long end, Number value, String unit) {
+        return new JmxClient.Sample(end, end, List.of(new JmxClient.Metric("x", "x", value, unit, value == null ? "Denied" : null)));
     }
     private static TrendSeries series(JmxClient.Sample... samples) { return TrendSeries.of(List.of(samples), "x", "bytes"); }
     @Test void onePointAndConstantValuesAreCenteredInsteadOfPretendingToBeZero() {
@@ -32,9 +35,9 @@ class TrendSeriesTest {
         assertThrows(UnsupportedOperationException.class, () -> capped.points().clear());
     }
     @Test void extremaAreVisibleAndFiniteWithoutOverflow() {
-        var data = TrendSeries.of(List.of(sample(0, -Double.MAX_VALUE), sample(2000, Double.MAX_VALUE)), "x", "unit unspecified");
+        var data = TrendSeries.of(List.of(sample(0, -Double.MAX_VALUE, "unit unspecified"), sample(2000, Double.MAX_VALUE, "unit unspecified")), "x", "unit unspecified");
         assertEquals(.06, data.y(-Double.MAX_VALUE), 1e-8); assertEquals(.94, data.y(Double.MAX_VALUE), 1e-8);
-        var tiny = TrendSeries.of(List.of(sample(0, Double.MIN_VALUE), sample(2000, Double.MIN_VALUE * 2)), "x", "unit unspecified");
+        var tiny = TrendSeries.of(List.of(sample(0, Double.MIN_VALUE, "unit unspecified"), sample(2000, Double.MIN_VALUE * 2, "unit unspecified")), "x", "unit unspecified");
         assertTrue(Double.isFinite(tiny.y(Double.MIN_VALUE)));
         assertTrue(data.points().getLast().joinPrevious());
     }

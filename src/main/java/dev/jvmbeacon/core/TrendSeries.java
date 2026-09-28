@@ -17,10 +17,12 @@ public record TrendSeries(List<Point> points, String unit, long from, long to, d
         for (JmxClient.Sample sample : samples.subList(Math.max(0, samples.size() - 120), samples.size())) {
             var metric = sample.metrics().stream().filter(m -> m.key().equals(key)).findFirst().orElse(null);
             String error = sample.captureEnd() < sample.captureStart() ? "Invalid capture window"
-                    : metric == null ? "Not captured" : !metric.available() ? metric.error() == null ? "Unavailable" : metric.error() : null;
+                    : metric == null ? "Not captured" : !sourceUnit.equals(metric.unit()) ? "Different unit: " + metric.unit()
+                    : !metric.available() ? metric.error() == null ? "Unavailable" : metric.error() : null;
             double value = error == null ? metric.value().doubleValue() / divisor : Double.NaN;
             if (!Double.isFinite(value) && error == null) error = "Non-finite value; not zero";
             boolean join = previous != null && previous.value() != null && error == null
+                    && sample.captureStart() >= previous.end()
                     && sample.captureEnd() > previous.end() && (double) sample.captureEnd() - previous.end() <= 5_000;
             Point point = new Point(sample.captureStart(), sample.captureEnd(), error == null ? value : null,
                     error == null ? "Captured · " + metric.value() + " " + sourceUnit : error, join);

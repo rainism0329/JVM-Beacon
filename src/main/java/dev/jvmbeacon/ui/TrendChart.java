@@ -19,6 +19,10 @@ final class TrendChart extends JComponent {
     private static final DateTimeFormatter AXIS = DateTimeFormatter.ofPattern("HH:mm:ss").withZone(ZoneId.systemDefault());
     private final Supplier<TrendSeries> data;
     private int hoverX = -1;
+    private int cursorIndex = -1;
+    private java.util.function.IntConsumer cursorListener;
+    void setCursorListener(java.util.function.IntConsumer listener) { cursorListener = listener; }
+    void setCursorIndex(int index) { cursorIndex = index; repaint(); }
     @Override public javax.accessibility.AccessibleContext getAccessibleContext() {
         if (accessibleContext == null) accessibleContext = new AccessibleJComponent() {
             @Override public javax.accessibility.AccessibleRole getAccessibleRole() { return javax.accessibility.AccessibleRole.CANVAS; }
@@ -29,7 +33,15 @@ final class TrendChart extends JComponent {
         this.data = data; setToolTipText("Hover to inspect a captured sample.");
         getAccessibleContext().setAccessibleName("Captured metric trend; hover for exact sample values and times");
         MouseAdapter hover = new MouseAdapter() {
-            @Override public void mouseMoved(MouseEvent e) { hoverX = e.getX(); repaint(); }
+            @Override public void mouseMoved(MouseEvent e) {
+                hoverX = e.getX();
+                if (cursorListener != null) {
+                    TrendSeries series = data.get();
+                    var point = nearest(series, hoverX);
+                    if (point != null) cursorListener.accept(series.points().indexOf(point));
+                }
+                repaint();
+            }
             @Override public void mouseExited(MouseEvent e) { hoverX = -1; repaint(); }
         };
         addMouseListener(hover); addMouseMotionListener(hover);
@@ -86,8 +98,8 @@ final class TrendChart extends JComponent {
                 g.fillOval(x - radius, y - radius, radius * 2, radius * 2);
                 previous = point; px = x; py = y;
             }
-            if (hoverX >= left && hoverX <= left + width) {
-                var point = nearest(series, hoverX);
+            if (cursorIndex >= 0 && cursorIndex < series.points().size() || hoverX >= left && hoverX <= left + width) {
+                var point = cursorIndex >= 0 && cursorIndex < series.points().size() ? series.points().get(cursorIndex) : nearest(series, hoverX);
                 if (point != null) { int x = left + (int) (series.x(point) * width); g.setColor(BeaconUi.MUTED); g.setStroke(new BasicStroke(1)); g.drawLine(x, top, x, top + height); }
             }
             g.setColor(BeaconUi.MUTED);

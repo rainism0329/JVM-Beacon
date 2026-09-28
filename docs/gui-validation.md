@@ -1,6 +1,23 @@
-# GUI 验证记录：0.1.2—0.8.0
+# GUI 验证记录：0.1.2—0.9.0
 
-日期：**2026-09-24**，时区 Asia/Shanghai（UTC+08:00）。这是部分真实界面流程的观察记录，**不代表全部 GUI 验收通过**。自动测试、安装包及兼容性检查另见 [验证与接续状态](validation.md)。
+最近日期：**2026-09-28**，时区 Asia/Shanghai（UTC+08:00）。这是部分真实界面流程的观察记录，**不代表全部 GUI 验收通过**。自动测试、安装包及兼容性检查另见 [验证与接续状态](validation.md)。
+
+## 0.9.0：多指标时间线与可保存区间
+
+环境：Windows / IC 2025.1.3 / JBR 21 / 1388×974 / 125%；产品英文，Dark 与 Light。最终 ZIP SHA-256 `4ed335c00817e29a15f8bb01008bf162c806f263364d3f049ac6086a97786850`，312,925 bytes，11:29:56 生成；最终沙箱 JAR 与 ZIP 相同，**11:30:45.974** 加载。
+
+- 打开本日脚本生成的真实 `timeline.jvmb`，OFFLINE 8 点、1 个 >5 秒空档，四轨在本窗口同屏：[四轨 Dark](../build/reports/ui-0.9.0/01-offline-dark.png)。曲线空档不相连；平台线程恒定值居中，不把零或常量当缺失。
+- From # 由 1 改 3，to # 由 8 改 6，保留 4 点、原空档与原始时间；Inspect # 与选区使用同一编号：[选区](../build/reports/ui-0.9.0/02-interval-selected.png)。Interval comparison 显示源单位、四行端点差、gap/endpoint-only 限定：[比较](../build/reports/ui-0.9.0/03-interval-comparison.png)。截断的长数字仍可由单元格提示读取，未声称 CPU 差是累计 CPU 时间。
+- GUI **Save interval…** 保存 `build/examples/timeline-20260928-111731-677/gui-interval-0.9.0.jvmb`，状态确认 4 点：[保存](../build/reports/ui-0.9.0/04-gui-saved.png)。磁盘检查 v3、history.count=3 加 sample 共 4 点、threads.present=false，最后窗口 1790565466042–1790565466092 epoch ms。再通过 Open capture 打开，OFFLINE 4 点、时间轴仍为 11:17:37.934–11:17:46.092：[重开](../build/reports/ui-0.9.0/05-gui-reopened.png)。序号从新文件 1–4 开始，不暗示全会话序号持久化。
+- 启动本轮自有本地 fixture **PID 25784**，限制 300 秒，先用同 JDK `jcmd 25784 ManagementAgent.start_local` 初始化本地管理端点，无远程端口。GUI 选中准确 PID 连接，旧离线区间清除为 1 点，Read-only 开启、Auto 关闭。Start live 后真实值与时间更新：[实时 Dark](../build/reports/ui-0.9.0/06-live-dark.png)。
+- Freeze & select 固定 11 点，末次窗口 11:34:38.072；实时状态继续到 11:35:12.082，冻结点数/窗口仍不变：[冻结 Dark](../build/reports/ui-0.9.0/07-frozen-dark.png)、[Light 及稳定窗口](../build/reports/ui-0.9.0/08-frozen-light.png)。主题转换后没有固定白色分隔残留。Follow latest 回到 32 点和 11:35:20.086：[恢复跟随](../build/reports/ui-0.9.0/09-follow-latest.png)。
+- Pause live 在 42 点暂停，末次 11:35:40.091；恢复时第 43 点为 11:36:05.270，空档数由 1 变 2，未连线：[暂停](../build/reports/ui-0.9.0/10-paused.png)、[恢复](../build/reports/ui-0.9.0/11-resumed.png)。
+- fixture 到 300 秒正常退出（exit 0），保留 107 点，末次窗口为 11:38:13.264–11:38:13.309，停止采样并持久显示 CONNECTION 原因：[目标退出](../build/reports/ui-0.9.0/12-target-exit.png)。长错误提示占用空间时轨道按设计滚动，没有被错误清空。再冻结全部 107 点，通过 GUI 保存 `gui-live-0.9.0.jvmb`（247,762 bytes）并重开，OFFLINE 107 点、2 个空档、相同时间与数值：[保存](../build/reports/ui-0.9.0/13-live-saved.png)、[完整重开](../build/reports/ui-0.9.0/14-live-reopened.png)。
+- 最终沙箱于 **11:41:40.973** 正常退出，runIde exit 0；最终启动至退出 ERROR 级日志 **0**，平台 shared-index、WorkspaceFileIndex、preload、station、主题 WARN 保留在 [日志](../build/reports/ide-load-0.9.0.txt)。自有 fixture PID 25784 已不存在；没有关闭用户日常应用。
+
+候选过程：11:20:39 加载的首候选说明和工具栏占用过高，125% 下只显示一条半轨道；11:27:22 的候选仍需滚动到第四轨。二者正常退出后修正，最终以实际字体高度确定自适应门槛、压缩重复说明并增加共有时间范围。上面的图片均为 11:29:56 最终包，候选不外推为最终验收。
+
+未实操：完整键盘/屏幕阅读器、所有缩放及窄窗口矩阵、8 页真实目标、跨项目、远程 TLS/认证 GUI、Ultimate GUI、所有旧功能页面、动态卸载和长时资源。区间稳定与换目标清理另有 Swing 自动测试，不替代上述未测项。
 
 ## 0.8.0：连接工作区与显式重连
 
