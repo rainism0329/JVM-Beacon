@@ -14,6 +14,7 @@ import com.intellij.ui.table.JBTable;
 import com.intellij.util.ui.JBUI;
 import dev.jvmbeacon.core.JfrCapture;
 import dev.jvmbeacon.core.JfrSummary;
+import dev.jvmbeacon.core.JfrStacks;
 import dev.jvmbeacon.core.JmxClient;
 
 import javax.swing.*;
@@ -36,6 +37,7 @@ final class JfrPanel extends JPanel {
     private final Project project;
     private final Jobs jobs;
     private final Consumer<String> status;
+    private final JfrStacksPanel stacks;
     private final JButton refresh = new JButton("Check / refresh");
     private final JButton record = new JButton("Record…");
     private final JButton stop = new JButton("Stop…");
@@ -45,8 +47,11 @@ final class JfrPanel extends JPanel {
     private final JButton copyPath = new JButton("Copy file path");
     private final JButton copySummary = new JButton("Copy inventory");
     private final JTextArea stateText = BeaconUi.text("Connect a JVM, then check Flight Recorder support. No recording starts automatically.", 3);
-    private final JTextArea inventory = BeaconUi.text("Download a stopped recording or open a local .jfr to inspect its event inventory.\nFor stack and event analysis, open the same file in JDK Mission Control.", 12);
+    private final JTextArea inventory = BeaconUi.text("Download a stopped recording or open a local .jfr to inspect its event inventory.\nThen use Sampled stacks for a local flame graph and call tree; Coverage explains their limits.", 12);
     private final JLabel badge = BeaconUi.title("FLIGHT RECORDER");
+    private final JToggleButton captureToggle = new JToggleButton("Show capture controls");
+    private final JPanel captureControls = BeaconUi.panel(4);
+    private final JLabel compactState = BeaconUi.label("Local analysis · No target connected", true);
     private final JBTabbedPane views = new JBTabbedPane();
     private final JLabel inventorySummary = BeaconUi.label("No local recording inspected", true);
     private final JBTextField search = new JBTextField();
@@ -63,15 +68,20 @@ final class JfrPanel extends JPanel {
     private boolean uncertain;
     private Path localFile;
 
-    JfrPanel(Project project, Jobs jobs, Consumer<String> status) {
+    JfrPanel(Project project, com.intellij.openapi.Disposable owner, Jobs jobs, Consumer<String> status) {
         super(new BorderLayout(JBUI.scale(10), JBUI.scale(10)));
         this.project = project; this.jobs = jobs; this.status = status;
+        stacks = new JfrStacksPanel(jobs, frame -> SourceNavigator.navigateJfr(project, owner, frame, status), status);
         setBorder(JBUI.Borders.empty(12, 16));
         JPanel top = BeaconUi.panel(8);
         badge.putClientProperty("beacon.mono", true); badge.setForeground(BeaconUi.ACCENT);
-        top.add(BeaconUi.row(badge, refresh, record, stop, download, release), BorderLayout.NORTH);
+        top.add(BeaconUi.row(badge, captureToggle, compactState), BorderLayout.NORTH);
+        captureControls.add(BeaconUi.row(refresh, record, stop, download, release), BorderLayout.NORTH);
         stateText.setLineWrap(true); stateText.setWrapStyleWord(true);
-        top.add(BeaconUi.scroll(stateText), BorderLayout.CENTER); add(top, BorderLayout.NORTH);
+        captureControls.add(BeaconUi.scroll(stateText), BorderLayout.CENTER);
+        captureControls.setVisible(false); top.add(captureControls, BorderLayout.CENTER); add(top, BorderLayout.NORTH);
+        captureToggle.addActionListener(e -> expandCapture(captureToggle.isSelected()));
+        captureToggle.setToolTipText("Show recording controls and the last reported target state. Collapsing does not stop a recording.");
         inventory.putClientProperty("beacon.mono", true);
         JPanel local = BeaconUi.panel(6);
         JPanel tools = BeaconUi.panel(6);
@@ -81,7 +91,8 @@ final class JfrPanel extends JPanel {
         search.getAccessibleContext().setAccessibleName("Filter captured JFR event types");
         search.getDocument().addDocumentListener(new DocumentListener() {
             private void filter() { eventSorter.setRowFilter(search.getText().isBlank() ? null
-                    : RowFilter.regexFilter("(?i)" + java.util.regex.Pattern.quote(search.getText()), 0)); }
+                    : RowFilter.regexFilter("(?i)" + java.util.regex.Pattern.quote(search.getText()), 0));
+                eventTable.getEmptyText().setText(events.getRowCount() == 0 ? "No event inventory loaded" : "No captured event types match this filter"); }
             public void insertUpdate(DocumentEvent e) { filter(); }
             public void removeUpdate(DocumentEvent e) { filter(); }
             public void changedUpdate(DocumentEvent e) { filter(); }
@@ -97,6 +108,7 @@ final class JfrPanel extends JPanel {
         local.add(BeaconUi.scroll(eventTable), BorderLayout.CENTER);
         views.addTab("Event inventory", local);
         views.addTab("Inventory details", BeaconUi.scroll(inventory));
+        views.addTab("Sampled stacks", stacks);
         JTextArea guide = BeaconUi.text("JFR / CAPTURE CONTRACT\n\n"
                 + "1. Check / refresh discovers the target's Flight Recorder MXBean and default/profile presets.\n"
                 + "2. Turn off Read-only. Record confirms the target, configuration and 5–120 s duration.\n"
@@ -118,7 +130,11 @@ final class JfrPanel extends JPanel {
                 + "Concurrent recordings can enable additional events. Presets and events depend on the target JDK.\n"
                 + "This is not a complete thread census; virtual-thread coverage is event/JDK-dependent.\n\n"
                 + "DEEP ANALYSIS\n"
-                + "Use Copy file path, then File > Open File in a separately installed JDK Mission Control.\n"
+                + "Sampled stacks provides a flame graph and call tree for Java/native samples separately.\n"
+                + "Select an event kind and retained thread, then Apply filters. Highlight never changes counts.\n"
+                + "Click a frame or use the keyboard in Call tree, then Zoom selected / Find source candidate.\n"
+                + "Coverage lists missing, truncated and omitted samples. Width counts samples, not CPU time.\n"
+                + "For more event analysis, Copy file path, then File > Open File in a separately installed JDK Mission Control.\n"
                 + "JVM Beacon does not install or launch another program automatically.\n"
                 + "The local inventory counts events; it does not attribute CPU time or diagnose root causes.\n"
                 + "Open only recordings from sources you trust. JDK parsing can allocate per-event metadata.\n"
@@ -132,7 +148,7 @@ final class JfrPanel extends JPanel {
         download.addActionListener(e -> download());
         open.addActionListener(e -> {
             var descriptor = FileChooserDescriptorFactory.createSingleFileDescriptor("jfr");
-            descriptor.setTitle("Open trusted local JFR · Event inventory (64 MiB limit)");
+            descriptor.setTitle("Open trusted local JFR · Events and sampled stacks (64 MiB limit)");
             FileChooser.chooseFile(descriptor, project, null, file -> analyze(Path.of(file.getPath())));
         });
         copyPath.addActionListener(e -> { if (localFile != null) CopyPasteManager.getInstance().setContents(new StringSelection(localFile.toString())); });
@@ -146,6 +162,9 @@ final class JfrPanel extends JPanel {
     void setSession(JmxClient next, boolean busy, boolean readOnly) {
         if (client != next) {
             client = next; state = null; uncertain = false; localFile = null;
+            stacks.clear();
+            compactState.setText(next == null ? "Local analysis · No target connected" : "Connected · JFR support not checked");
+            expandCapture(next != null);
             events.setRowCount(0); search.setText(""); inventorySummary.setText("No local recording inspected");
             inventory.setText("Open a local .jfr or download a stopped recording to inspect captured events.");
             stateText.setText(next == null ? "Disconnected. Target-side cleanup was requested for any session-owned recording.\nIf cleanup could not reach the target, retained data may remain. Saved local files are unchanged."
@@ -162,9 +181,14 @@ final class JfrPanel extends JPanel {
         download.setEnabled(ready && !uncertain && state != null && "STOPPED".equals(state.state()));
         release.setEnabled(ready && !readOnly && !uncertain && state != null && state.id() != 0);
         open.setEnabled(!busy); copyPath.setEnabled(localFile != null); copySummary.setEnabled(localFile != null);
+        stacks.setBusy(busy);
     }
 
     @FunctionalInterface private interface Remote { JfrCapture.State call(JfrCapture capture) throws Exception; }
+    private void expandCapture(boolean expanded) {
+        captureToggle.setSelected(expanded); captureToggle.setText(expanded ? "Hide capture controls" : "Show capture controls");
+        captureControls.setVisible(expanded); revalidate(); repaint();
+    }
     private void run(String label, long deadline, Remote operation) {
         JmxClient active = client;
         if (active == null || busy) return;
@@ -173,6 +197,7 @@ final class JfrPanel extends JPanel {
 
     private void show(JfrCapture.State next) {
         state = next; uncertain = false;
+        compactState.setText("Reported: " + next.state() + (next.id() == 0 ? "" : " · #" + next.id()) + " · Refresh to verify");
         String details = !next.supported() ? "UNAVAILABLE · Flight Recorder MXBean is not registered on this target."
                 : next.id() == 0 ? "READY · No recording owned by this connection. Available presets: " + String.join(", ", next.configurations())
                 : "Reported state: " + next.state() + " · Recording #" + next.id() + " · " + next.durationSeconds() + " s limit · Stored bytes: " + next.bytes()
@@ -187,6 +212,7 @@ final class JfrPanel extends JPanel {
 
     private void failed(String message) {
         uncertain = true;
+        compactState.setText("JFR state unconfirmed · Show controls and refresh"); expandCapture(true);
         stateText.setText("JFR state is unconfirmed. Last recording ID: " + (state == null ? "Not available" : state.id())
                 + "\n" + message + "\nRefresh before taking another action. Failed mutations are not automatically retried.");
         updateActions();
@@ -245,14 +271,19 @@ final class JfrPanel extends JPanel {
     }
 
     private void analyze(Path path) {
-        jobs.run("Inspect local JFR events", false, 8_000, () -> JfrSummary.inspect(path), report -> {
+        record Local(JfrSummary.Report report, JfrStacks.View view) { }
+        jobs.run("Inspect local JFR events and sampled stacks", false, 8_000, () -> {
+            var report = JfrSummary.inspect(path);
+            return new Local(report, JfrStacks.aggregate(report.stacks(), JfrStacks.Kind.JAVA, null));
+        }, result -> {
+            var report = result.report(); stacks.load(report.stacks(), result.view()); expandCapture(false);
             localFile = path.toAbsolutePath(); inventory.setText(report.text()); inventory.setCaretPosition(0);
             events.setRowCount(0); search.setText("");
             for (var type : report.types()) events.addRow(new Object[]{type.name(), type.count()});
             inventorySummary.setText(String.format("%,d events · %,d bytes · %s · Counts, not CPU time", report.events(), report.bytes(), report.partial() ? "PARTIAL scan" : "End of file"));
             inventorySummary.setToolTipText("Observed event window: " + report.first() + " → " + report.last() + "; " + localFile);
             views.setSelectedIndex(0); updateActions();
-            status.accept("Local JFR inventory ready. Copy the file path to open it in JDK Mission Control for deeper analysis.");
-        }, error -> { events.setRowCount(0); inventorySummary.setText("Local inventory unavailable · See details"); views.setSelectedIndex(1); inventory.setText(error + "\nThe file was not modified. Try opening it in JDK Mission Control."); localFile = path.toAbsolutePath(); updateActions(); });
+            status.accept("Local JFR ready. Open Sampled stacks for the flame graph, call tree and coverage limits.");
+        }, error -> { stacks.clear(); events.setRowCount(0); inventorySummary.setText("Local inventory unavailable · See details"); views.setSelectedIndex(1); inventory.setText(error + "\nThe file was not modified. Try opening it in JDK Mission Control."); localFile = path.toAbsolutePath(); updateActions(); });
     }
 }

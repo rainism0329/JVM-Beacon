@@ -184,7 +184,18 @@ $env:JAVA_HOME = 'C:\Users\lenovo\.jdks\corretto-21.0.9'
 .\scripts\capture-jfr-demo.ps1 -JdkHome 'C:\Users\lenovo\.jdks\corretto-21.0.9'
 ```
 
-预计约 10 秒（冷启动可能更久），输出 `JFR_CAPTURE_PASS`。生成目录含 capture.jfr、inventory.txt 和目标/时刻/大小证据。使用自有认证 loopback 子 JVM、operator 账号，5 秒后自动停止并释放录制、finally 退出进程。
+预计约 15 秒（冷启动可能更久），输出 `JFR_CAPTURE_PASS`。0.11.0 起生成目录含 capture.jfr、inventory.txt、stacks.txt 和目标/时刻/大小证据。使用自有认证 loopback 子 JVM、operator 账号，显式开启有时限 CPU 脉冲，profile 录制 8 秒后自动停止，核对真实 cpuPulse 采样后释放录制、finally 退出进程。
+
+### Sampled stacks（0.11.0）
+
+1. 按上面脚本生成文件，保持断开连接；Open local .jfr 载入 capture.jfr，Sampled stacks 应显示 ExecutionSample 的真实样本数。Event inventory 中的同类事件数可能大于图中已表示样本，差异必须由 Coverage 的 missing / omitted / tree omissions 解释。未达限制的演示文件应一致。
+2. 选择 CPU 脉冲线程，再 Apply filters；调用路径中应包含 DemoApplication.cpuPulse。线程名字相同不作为身份合并依据。选择 NativeMethodSample 时样本数/路径应改变；native 采样可能包含 FileInputStream.readBytes 或 socket accept，不能以宽度判定 CPU 热点。
+3. 图中选一帧核对 inclusive、self、相对筛选后分母的占比。Zoom selected 改变图的缩放，不改变详情占比分母；Reset zoom 恢复全图。Call tree 用方向键展开/选择，Zoom selected 同样生效。Highlight 输入 cpuPulse 后只高亮；清空恢复颜色，数据数量不变。
+4. Coverage 核对采样时窗、kind、thread、partial scan、所有限制。另开不含采样的可信 .jfr 应显示无表示栈；损坏文件应清除旧图并报错。新目标/断开/换文件后的迟到计算不得还原旧图。部分扫描不是完整录制，即使当前图有样本也必须提示 PARTIAL。
+5. 在包含与 fixture 相同源码的 IDEA 项目中选 cpuPulse 的有行号帧，Find source candidate 核对记录描述符 `(Ljava/util/concurrent/CountDownLatch;)V`，确认后应打开相应方法行。没有源码时应说明未匹配，不能猜测文件。方法签名、行号、依赖版本不同必须人工核验。
+6. Light / Dark、125% 与较窄窗口下查看工具栏换行、纵向滚动和图中文字。窄帧不强行挤入文字；精确值仍可从 Call tree/详情读取。各主题不得出现固定白色粗分隔。
+
+自动回归新增 JfrStacksTest（递归/路径统计、kind/线程隔离、descriptor/class ID 区分、树上限不伪造 self、取消、真实 consumer 帧顺序、缺失栈、保留预算、截断），JfrIntegrationTest（自有远程 profile → 真实 CPU 方法和 sampledThread），JfrStacksPanelTest（busy 禁止请求、换文件丢弃迟到分析）。确定性 consumer 测试在独立子 JVM 写自定义事件，只用于测试转换，不把自定义事件标成产品 CPU 样本；生产入口只接受两个明确事件名。
 
 自动用例 `JfrCaptureTest` / `JfrIntegrationTest` 包括：无 MXBean、只读拒绝、输入时限校验、录制中拒绝下载、自动停止、提前停止、真实文件可读、扫描截断、禁止覆盖、三轮连接清理不影响其他 ID、创建迟到不启动、配置失败不重试、64 MiB 流上限和读取迟到取消后关闭流/移除 partial。传输异常用真实自有目标加客户端流返回注入验证，不冒充真实 WAN 故障。
 

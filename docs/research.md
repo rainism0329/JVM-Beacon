@@ -155,3 +155,11 @@
 - [Oracle JDK Mission Control](https://www.oracle.com/java/technologies/jdk-mission-control.html)：专业 JFR 分析入口。此轮核验产品定位，不宣称实测 JMC GUI。种子 `https://docs.oracle.com/en/java/javase/21/jfapi/flight-recorder.html` 抓取失败，未将其作为已读依据。
 
 项目判断：先提供可控录制和可带走的证据，再开发采样栈视图。可排序/搜索的事件库存有助于快速确认实际采到了哪些事件，不能替代专业分析。价值仍待外部用户验证。实际自有 JVM / GUI 证据分别见 validation 和 gui-validation，不由官方声明推导本插件已通过。
+
+### 采样栈语义补查（2026-09-28，0.11.0）
+
+- **官方 API，JDK 21，已访问**：[RecordedStackTrace](https://docs.oracle.com/en/java/javase/21/docs/api/jdk.jfr/jdk/jfr/consumer/RecordedStackTrace.html) 提供栈与截断标记；文档并未明确帧顺序，因此另用自有子 JVM 的已知递归调用验证 leaf-first，不能把顺序当作查到的文档声明。
+- **官方 API，JDK 21，已访问**：[RecordedFrame](https://docs.oracle.com/en/java/javase/21/docs/api/jdk.jfr/jdk/jfr/consumer/RecordedFrame.html) 的行号/BCI 可以缺失，Java native 方法仍属于 Java frame；[RecordedMethod](https://docs.oracle.com/en/java/javase/21/docs/api/jdk.jfr/jdk/jfr/consumer/RecordedMethod.html) 给出所属类、描述符和 hidden 信息，不提供 SourceFile 属性。[RecordedThread](https://docs.oracle.com/en/java/javase/21/docs/api/jdk.jfr/jdk/jfr/consumer/RecordedThread.html) 的记录内 ID 与 Java thread ID 分开保留。
+- **官方源码元数据，jdk21u master，访问日版本快照而非固定发行 tag**：[metadata.xml](https://raw.githubusercontent.com/openjdk/jdk21u/master/src/hotspot/share/jfr/metadata/metadata.xml) 两种采样事件均使用 sampledThread，不用 eventThread 推断采样线程。NativeMethodSample 描述在 native 中观察线程状态。该文件声明 GPLv2；仅核对数据定义，没有复制实现或资源。尝试抓取 recorder/stacktrace/jfrStackTrace.cpp 与 internal/consumer/StackTrace.java 失败，不作为已读证据。
+- **实际测试，本机 Corretto 21.0.9、认证 loopback 自有 fixture**：8 秒 profile 文件含 ExecutionSample=4、NativeMethodSample=388。JDK jfr print 在 native 栈里读到 FileInputStream.readBytes、Net.accept，说明 native 栈不能直接解释为 CPU 执行耗时；范围限于本次文件。生产入口仅识别两个明确事件名，确定性转换测试的自定义事件不伪装成真实 CPU 采样。
+- **产品/实现判断**：分开 event kind，宽度按表示样本计数，线程筛选只针对已保留线程；截断根、丢弃数量、扫描窗口明显可见。原生 Swing 自绘并配键盘调用树，无新依赖或竞品图标。减少切换工具的价值仍是待验证假设，暂不宣称替代完整 profiler。源码候选需精确类+descriptor+方法所属行，再让用户确认未核验版本/loader 关系。

@@ -1,6 +1,22 @@
-# GUI 验证记录：0.1.2—0.10.0
+# GUI 验证记录：0.1.2—0.11.0
 
 最近日期：**2026-09-28**，时区 Asia/Shanghai（UTC+08:00）。这是部分真实界面流程的观察记录，**不代表全部 GUI 验收通过**。自动测试、安装包及兼容性检查另见 [验证与接续状态](validation.md)。
+
+## 0.11.0：采样调用树与火焰图
+
+2026-09-28，最终包 **13:14:31**，SHA-256 `9e17d7e4059cc8dfefb83172104bae8b384366cf185cf1e9688f8d112cf6023e`。IC-251.26927.53/JBR 21/Windows，1388×974、125%。最终沙箱加载 JAR 与 ZIP 内一致，加载/退出日志和校验见 validation。所有下述文件来自本项目的独立测试进程，GUI 分析全程未连接业务目标。
+
+- 最终包 **13:15:16.938** 加载。从 Open local .jfr 打开 `build/examples/jfr-20260928-125558-062/capture.jfr`：360,692 bytes、4,637 events、EOF，[库存](../build/reports/ui-0.11.0/inventory.png)。Sampled stacks 默认 Java=4，[Light](../build/reports/ui-0.11.0/light.png)，切换原生 [Dark](../build/reports/ui-0.11.0/dark.png) 后颜色与字体更新，无固定白分隔。深路径使用纵向滚动，当前尺寸约能直接看到 3 层；未宣称所有窄窗口均可用。
+- 切 NativeMethodSample 再 Apply filters，树与图变为 **388** 样本，[native 图](../build/reports/ui-0.11.0/native.png)。选择 98 样本路径显示 25.26%，[Zoom 后](../build/reports/ui-0.11.0/native-zoom.png) 分母不变。向下滚动后 Reset 恢复 388 根节点，[复位](../build/reports/ui-0.11.0/reset.png)。
+- 切回 ExecutionSample，选择 `beacon-fixture-cpu-pulse · Java #33 / JFR #33` 再 Apply，**3** 样本，[线程筛选](../build/reports/ui-0.11.0/filter.png)。输入 cpuPulse 后仅高亮，滚动找到 `cpuPulse:243`，[选中帧](../build/reports/ui-0.11.0/highlight.png)显示 3 inclusive / 0 self；此行实际在 await 附近，不能从方法名或样本比例宣称循环占 CPU 时间。Coverage 保留 kind、thread、全 kind 缺失/遗漏与时窗，[范围](../build/reports/ui-0.11.0/coverage.png)。
+- 验收项目配置 Corretto 21 SDK，源码为当前 fixture 的复制件。Find source candidate 检查类、`(Ljava/util/concurrent/CountDownLatch;)V`、方法所属行后出现[确认](../build/reports/ui-0.11.0/source-confirm.png)，确认后确实打开 [DemoApplication.java 第 243 行](../build/reports/ui-0.11.0/source-editor.png)。版本/loader 未核验提示保留。较早候选沙箱没配项目 SDK 时明确未匹配，没有猜测导航；不将候选失败当最终成功证据。
+- Call tree 显示与图相同 inclusive/self 路径；鼠标聚焦根后按右方向键选择子路径，详情随之更新，[键盘证据](../build/reports/ui-0.11.0/keyboard.png)。这不是全套屏幕阅读器/快捷键验收。
+- 自有 `StackRecordingFixture` 产生 **111,689 bytes** 的 no-sampling.jfr，只有一个 beacon.StackConversionTest 自定义事件；切图显示 **0 represented samples / n/a share** 与明确[无采样状态](../build/reports/ui-0.11.0/empty.png)，不继承旧树。不把自定义事件当 CPU 采样。
+- 故意损坏的本地 invalid.jfr 显示 [I/O/格式失败](../build/reports/ui-0.11.0/invalid.png)，旧图和操作均[清除](../build/reports/ui-0.11.0/cleared.png)。原文件未修改。**13:22:54.437** 正常退出沙箱，runIde exit 0，最终会话 ERROR 级日志 0；平台 WARN（主题、索引等）保留。
+
+候选中发现并修复：长状态/详情挤掉图表；从深层滚动后 Zoom 留在旧滚动位置。最终包增加可收起 Capture controls、详情滚动区域和回根行为并用以上新截图验收。未将 13:00/13:06 候选包截图写成最终包证据。
+
+未实操：本轮重新录制的所有 GUI 按钮、连接状态下收起/展开控制的完整矩阵、复制内容的剪贴板回读、无匹配事件搜索、超大/限额文件 GUI、Ultimate GUI、窄窗口/其他缩放、无障碍全矩阵、源版本/loader 冲突、完整 attached-source 成功流程。对应组件/核心测试仅在其层级报告。
 
 ## 0.10.0：Flight Recorder 与本地事件库存
 

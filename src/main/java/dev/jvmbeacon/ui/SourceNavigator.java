@@ -26,6 +26,48 @@ final class SourceNavigator {
     private static final int MAX_CLASS_NAME = 2_048;
     private static final int MAX_NESTING = 64;
 
+    /** JFR lacks a source filename. Require exact class + descriptor + method-owned line, then confirm a candidate. */
+    static void navigateJfr(Project project, Disposable owner, dev.jvmbeacon.core.JfrStacks.Frame frame, Consumer<String> status) {
+        if (frame.line() < 1 || frame.className().length() > MAX_CLASS_NAME
+                || frame.className().chars().filter(c -> c == '$').count() > MAX_NESTING || DumbService.isDumb(project)) {
+            status.accept("Source lookup needs a usable recorded line and completed IDE indexing."); return;
+        }
+        ReadAction.nonBlocking(() -> {
+            Set<VirtualFile> files = new LinkedHashSet<>();
+            for (PsiClass clazz : namedClasses(JavaPsiFacade.getInstance(project), GlobalSearchScope.allScope(project), frame.className())) {
+                for (var method : clazz.getMethods()) {
+                    String name = method.isConstructor() ? "<init>" : method.getName();
+                    if (!name.equals(frame.method()) || !frame.descriptor().equals(ClassUtil.getAsmMethodSignature(method))) continue;
+                    PsiElement source = method.getNavigationElement();
+                    if (!(source instanceof com.intellij.psi.PsiMethod)) continue;
+                    PsiFile file = source.getContainingFile();
+                    if (file == null || file instanceof com.intellij.psi.PsiCompiledFile || file.getVirtualFile() == null) continue;
+                    var document = PsiDocumentManager.getInstance(project).getDocument(file);
+                    var range = source.getTextRange();
+                    if (document == null || range == null || frame.line() > document.getLineCount()) continue;
+                    int startLine = document.getLineNumber(range.getStartOffset()) + 1;
+                    int endLine = document.getLineNumber(Math.max(range.getStartOffset(), range.getEndOffset() - 1)) + 1;
+                    if (frame.line() >= startLine && frame.line() <= endLine) files.add(file.getVirtualFile());
+                }
+            }
+            return files;
+        }).inSmartMode(project).expireWith(owner).finishOnUiThread(ModalityState.any(), files -> {
+            if (project.isDisposed()) return;
+            if (files.size() != 1) {
+                status.accept(files.isEmpty() ? "No source matches the exact recorded class, method descriptor and method-owned line. Check attached sources."
+                        : "Multiple source files match. Resolve duplicate dependencies before retrying."); return;
+            }
+            VirtualFile file = files.iterator().next();
+            if (Messages.showOkCancelDialog(project, "Recorded frame: " + frame.label() + "\nDescriptor: " + frame.descriptor()
+                    + "\nCandidate: " + file.getPath() + "\n\nClass, descriptor and method-owned line match."
+                    + " JFR provides no source filename or version verification. The recorded class loader is not matched to IDE dependencies.\nOpen this candidate?",
+                    "Confirm JFR Source Candidate", "Open Candidate", "Cancel", Messages.getQuestionIcon()) == Messages.OK && !project.isDisposed()) {
+                new OpenFileDescriptor(project, file, frame.line() - 1, 0).navigate(true);
+                status.accept("Opened confirmed JFR source candidate. Source version and class-loader mapping remain unverified.");
+            }
+        }).submit(AppExecutorUtil.getAppExecutorService());
+    }
+
     static void navigate(Project project, Disposable owner, StackTraceElement frame, Consumer<String> status) {
         if (frame.getFileName() == null || frame.getLineNumber() < 1) {
             status.accept("This frame has no source file or usable line number.");

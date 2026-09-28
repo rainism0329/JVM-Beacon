@@ -11,11 +11,11 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.List;
 
-/** Bounded event inventory, not a profiler or root-cause diagnosis. Never retains event payloads. */
+/** Bounded inventory and sampled-stack copies; never retains JDK recorded objects. */
 public final class JfrSummary {
     private JfrSummary() { }
     public record EventCount(String name, long count) { }
-    public record Report(String text, List<EventCount> types, long events, long bytes, Instant first, Instant last, boolean partial) {
+    public record Report(String text, List<EventCount> types, long events, long bytes, Instant first, Instant last, boolean partial, JfrStacks.Data stacks) {
         public Report { types = List.copyOf(types); }
     }
     public static String read(Path path) throws IOException { return inspect(path).text(); }
@@ -30,6 +30,7 @@ public final class JfrSummary {
         long size = Files.size(path);
         if (size > JfrCapture.DOWNLOAD_BYTES) throw new IOException("Local JFR inventory is limited to 64 MiB files.");
         Map<String, Long> counts = new LinkedHashMap<>();
+        JfrStacks.Builder stacks = new JfrStacks.Builder();
         long count = 0, otherTypes = 0;
         Instant first = null, last = null;
         boolean truncated;
@@ -38,6 +39,7 @@ public final class JfrSummary {
             while (file.hasMoreEvents() && count < eventLimit && System.nanoTime() < deadline) {
                 if (Thread.currentThread().isInterrupted()) throw new InterruptedIOException("Local JFR inventory cancelled.");
                 var event = file.readEvent();
+                stacks.accept(event);
                 String type = event.getEventType().getName();
                 if (counts.containsKey(type) || counts.size() < 256) counts.merge(type, 1L, Long::sum);
                 else otherTypes++;
@@ -63,6 +65,6 @@ public final class JfrSummary {
         result.append("\nFor CPU, allocations, GC and stack analysis: open this local .jfr in JDK Mission Control.\n")
                 .append("No upload or cloud account is required. This inventory does not authenticate the file's target identity.\n");
         return new Report(result.toString(), counts.entrySet().stream().map(e -> new EventCount(e.getKey(), e.getValue())).toList(),
-                count, size, first, last, truncated);
+                count, size, first, last, truncated, stacks.finish(truncated));
     }
 }

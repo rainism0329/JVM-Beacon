@@ -161,7 +161,7 @@ public final class BeaconPanel extends JPanel implements Disposable {
     public BeaconPanel(Project project) {
         super(new BorderLayout());
         this.project = project;
-        jfr = new JfrPanel(project, this::backgroundWithDeadline, this::status);
+        jfr = new JfrPanel(project, this, this::backgroundWithDeadline, this::status);
         liveActions.add(timelineLive);
         timelineLive.addActionListener(e -> {
             autoSample.setSelected(!autoSample.isSelected()); updateSamplingTimer();

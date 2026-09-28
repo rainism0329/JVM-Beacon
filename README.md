@@ -1,8 +1,8 @@
 # JVM Beacon
 
-IDEA 原生的 JMX 管理与 JVM 运行时诊断工作台。当前开发版本为 **0.10.0**（2026-09-28）：核心流程无需云账号、外部 AI 或上传运行数据。[GitHub 源码仓库](https://github.com/rainism0329/JVM-Beacon) 为私有。本仓库尚未发布到 Marketplace；名称、plugin ID 和发布者信息仍属开发阶段。
+IDEA 原生的 JMX 管理与 JVM 运行时诊断工作台。当前开发版本为 **0.11.0**（2026-09-28）：核心流程无需云账号、外部 AI 或上传运行数据。[GitHub 源码仓库](https://github.com/rainism0329/JVM-Beacon) 为私有。本仓库尚未发布到 Marketplace；名称、plugin ID 和发布者信息仍属开发阶段。
 
-0.10.0 增加 **Flight Recorder**：本地/远程 JMX 能力检查、5–120 秒有界 JFR 录制、提前停止、下载 `.jfr`、离线事件表与搜索排序。保留 Signal timeline、采集区间保存、连接工作区、锁链/线程比较、Hot threads、多连接标签、复杂值浏览、`hostname:port` 和受控 MBean 方法调用。界面保持英文和原生主题。实际验收范围见 [验证记录](docs/validation.md) 和 [GUI 记录](docs/gui-validation.md)，仍是开发预览。
+0.11.0 增加 **JFR Sampled stacks**：可缩放火焰图、调用树、Java/native 采样分离、线程筛选、方法高亮和保守的源码候选定位。图宽表示已保留样本数量，缺失/截断/遗漏可见，不能当作 CPU 时间。保留有界 JFR 录制/下载、事件表、Signal timeline、连接工作区、锁链/线程比较、Hot threads、多连接标签、复杂值浏览、`hostname:port` 和受控 MBean 方法调用。界面保持英文和原生主题。实际验收范围见 [验证记录](docs/validation.md) 和 [GUI 记录](docs/gui-validation.md)，仍是开发预览。
 
 第一次测试可按下方顺序操作：**安装 → 启动测试 JVM → 单连接流程 → 双连接标签页**。完整验收清单、预期结果和排错见 [测试指南](docs/testing.md)。文档中的待执行步骤不代表已经验收通过。
 
@@ -12,7 +12,7 @@ IDEA 原生的 JMX 管理与 JVM 运行时诊断工作台。当前开发版本�
 
 本轮开发与兼容性检查目标是 **IntelliJ IDEA Community / Ultimate 2025.1.3，IC/IU-251.26927.53，JBR 21，Windows**。Community 使用官方完整发行包；被监控测试程序使用 JDK 21。描述符允许的版本范围不等于全部版本均已实测，兼容性检查也不代替 GUI 验收。
 
-1. 在 IDEA 的 **Settings → Plugins → 齿轮 → Install Plugin from Disk…** 选择 [jvm-beacon-0.10.0.zip](build/distributions/jvm-beacon-0.10.0.zip)，按 IDE 提示重新启动；最终包验证状态见上方记录。
+1. 在 IDEA 的 **Settings → Plugins → 齿轮 → Install Plugin from Disk…** 选择 [jvm-beacon-0.11.0.zip](build/distributions/jvm-beacon-0.11.0.zip)，按 IDE 提示重新启动；最终包验证状态见上方记录。
 2. 打开项目，通过 **View → Tool Windows → JVM Beacon** 打开底部工具窗口。
 3. 点击 **Connect JVM…**，选择当前用户可见的本地 Java 进程，或输入 PID。若该进程尚未开启本地管理端点，需要明确勾选 **Allow starting the local management agent if needed**；这会改变目标进程状态。
 4. 连接成功后核对顶部的目标身份和启动时间。默认开启观察模式，自动采样关闭；可在“Telemetry”手动采样或开启每 2 秒采样。
@@ -156,7 +156,7 @@ v3 现场格式保存目标标识、最多 120 个保留的指标样本、一份
 - 本地 Attach、远程 JMX/RMI；连接身份、失败阶段提示及手动重连。暂不支持运行配置自动关联、SSH、Jolokia 或容器自动发现。
 - ObjectName 搜索与应用级收藏；属性读取、复杂值文本/结构树/顶层表格、严格类型校验后的写入和精确签名操作调用。编辑支持基础标量、常用数值类型、`ObjectName`、基础类型数组和 `String[]`；不反射构造任意目标对象。
 - 选中 MBean 时读取其可读属性，并对展示数量和文本设上限；这些展示限制不能限制 RMI 接收巨大对象时的反序列化开销，当前仅连接可信目标。
-- 实际指标与最多 120 点趋势，2 秒可选采样，无请求重叠；超过 5 秒的采样间隔不连接折线。JFR 当前提供录制和事件库存，不提供健康分、自动根因判断或采样调用树/火焰图。
+- 实际指标与最多 120 点趋势，2 秒可选采样，无请求重叠；超过 5 秒的采样间隔不连接折线。JFR 提供录制、事件库存、采样调用树/火焰图；不提供健康分或自动根因判断。
 - ThreadMXBean 平台线程快照、名称/ID/状态筛选：最多 512 条线程、每栈最多 64 帧，明确标识截断。现场线程比较只处理已采集范围，最多显示 200 条差异。缺失不等于零，栈未变化不等于持续阻塞；不覆盖虚拟线程。源码和运行字节码版本的一致性仍需用户确认。
 - `.jvmb` 现场保存、离线重开与文本比较；文件上限 5 MiB。指标与线程可能在不同时间采集，不是原子快照，也不能恢复未采集历史。
 - 每个视图最多一个在途任务；连接截止时间 20 秒，普通请求 8 秒。取消或超时不保证底层 Attach/RMI 已停止；迟到结果丢弃，修改结果可能未知。全局网络/Attach 池最多 4 个线程，本地文件与 PasswordSafe I/O 池最多 2 个线程，均无任务队列且彼此隔离；网络池耗尽不会占用离线任务的执行名额。16 个连接许可覆盖连接中、活动和关闭阶段，每个已接纳连接预留清理容量。
@@ -208,4 +208,16 @@ $beaconIde = 'D:\IdeaProjects\JVM-Beacon\.intellijPlatform\ides\community-2025.1
 .\scripts\capture-jfr-demo.ps1 -JdkHome 'C:\Users\lenovo\.jdks\corretto-21.0.9'
 ```
 
-成功输出 `JFR_CAPTURE_PASS`，时间戳目录内有 `capture.jfr`、`inventory.txt`、`evidence.txt`；脚本启动自有认证 loopback JVM、录制 5 秒、下载、重读并清理，不连接业务进程。完整负向用例和预期结果见 [测试指南](docs/testing.md)。
+成功输出 `JFR_CAPTURE_PASS`，时间戳目录内有 `capture.jfr`、`inventory.txt`、`stacks.txt`、`evidence.txt`；脚本启动自有认证 loopback JVM，显式开启有时限的 CPU 脉冲，使用 profile 录制 8 秒，验证捕获到 cpuPulse 后下载、重读并清理，不连接业务进程。完整负向用例和预期结果见 [测试指南](docs/testing.md)。
+
+## JFR 火焰图与调用树（0.11.0）
+
+先运行上面的 `capture-jfr-demo.ps1`。无需保持目标运行，在 **Flight Recorder → Open local .jfr…** 打开输出的 `capture.jfr`，再选择 **Sampled stacks**：
+
+1. 默认查看 `jdk.ExecutionSample`，**Flame graph** 从顶部根路径向下展开；宽度表示当前已表示样本数。`jdk.NativeMethodSample` 单独选择，不能把 native 等待栈的宽度解释成 CPU 时间。
+2. 选择保留的 sampled thread（例如 `beacon-fixture-cpu-pulse`），点击 **Apply filters**。界面过滤只用本地有界副本，没有新的网络请求；**Highlight method / class…** 只高亮，不改变分母。
+3. 单击帧查看 inclusive/self 样本数、方法描述符、记录内 class ID 和行号；**Zoom selected** 放大路径，**Reset zoom** 返回全图。占比始终相对当前筛选后已表示样本，缩放不更改分母。像素以下的小帧可从 **Call tree** 用方向键选择。
+4. **Find source candidate…** 仅在类、方法描述符和方法所属行均匹配项目或附加源码时提供候选确认。JFR 没有提供 source filename，源码版本和 class loader 到依赖的映射未验证；匿名/隐藏类、缺行号、重复候选等情况不猜测导航。
+5. **Coverage** 和图上方显示扫描部分状态、缺失栈、被预算省略的样本与截断数量。**Copy evidence** 复制范围说明和选中帧，不自动上传或导出整棵树。没有采样不代表没有活动。
+
+每文件最多保留 20,000 个采样、200,000 帧引用、128 帧/栈、256 个线程、8,192 个不同帧、2 Mi 字符帧元数据；每个名字/描述符上限 512 字符。每棵树 8,192 节点，超过时省略整条样本路径并计数。选择数量不等于完整录制数量；截断栈以 `[older frames not captured]` 显示，按文件遍历先到先保留。当前未提供时间范围筛选、分配火焰图、GC/锁事件关联或完整 JMC 分析。

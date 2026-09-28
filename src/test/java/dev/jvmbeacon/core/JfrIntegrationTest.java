@@ -21,6 +21,21 @@ import static org.junit.jupiter.api.Assertions.*;
 class JfrIntegrationTest {
     @TempDir Path directory;
 
+    @Test void actualRemoteProfileFindsOwnedCpuPulseAndThread() throws Exception {
+        try (FixtureProcess fixture = new FixtureProcess(true, Map.of(), java.util.List.of("--cpu-demo")); JmxClient client = fixture.remote("operator")) {
+            client.jfr().start("profile", 8);
+            long end = System.nanoTime() + 18_000_000_000L;
+            while (!"STOPPED".equals(client.jfr().inspect().state()) && System.nanoTime() < end) Thread.sleep(250);
+            assertEquals("STOPPED", client.jfr().inspect().state());
+            var report = JfrSummary.inspect(client.jfr().download(directory.resolve("cpu-profile.jfr")));
+            var thread = report.stacks().threads(JfrStacks.Kind.JAVA).stream().filter(t -> t.name().equals("beacon-fixture-cpu-pulse")).findFirst().orElseThrow();
+            var view = JfrStacks.aggregate(report.stacks(), JfrStacks.Kind.JAVA, thread);
+            assertTrue(view.root().inclusive() > 0);
+            assertTrue(report.stacks().samples().stream().filter(s -> s.thread().equals(thread)).anyMatch(s -> s.leafFirst().stream().anyMatch(f -> f.method().equals("cpuPulse"))));
+            assertEquals(0, client.jfr().release().id());
+        }
+    }
+
     @Test void remoteRecordingStopsByItselfDownloadsAndReleases() throws Exception {
         try (FixtureProcess fixture = new FixtureProcess(true);
              JmxClient client = JmxClient.connectRemote(fixture.url, "operator", fixture.password.toCharArray(), false)) {

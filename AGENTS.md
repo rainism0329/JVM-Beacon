@@ -1,6 +1,6 @@
 # JVM Beacon
 
-IDEA 原生 JMX 诊断插件；当前开发版本 0.10.0（2026-09-28）。用户已授权创建并推送到现有账号 rainism0329 的私有 GitHub 仓库 JVM-Beacon；不公开仓库、不发布 Marketplace 或 GitHub Release。
+IDEA 原生 JMX 诊断插件；当前开发版本 0.11.0（2026-09-28）。用户已授权创建并推送到现有账号 rainism0329 的私有 GitHub 仓库 JVM-Beacon；不公开仓库、不发布 Marketplace 或 GitHub Release。
 
 - Java 21、IntelliJ Platform Gradle Plugin 2.x、Swing；纯 JDK 核心放在 `dev.jvmbeacon.core`，IDE 适配/UI 放在 `dev.jvmbeacon.ui`。
 - UI 复用 `BeaconUi`：OnePixelSplitter、动态主题色、DPI 间距和字体随主题更新；不恢复标准 Swing 粗分隔或固定亮色背景。
@@ -27,7 +27,8 @@ IDEA 原生 JMX 诊断插件；当前开发版本 0.10.0（2026-09-28）。用�
 - Lock chains 仅用 owner ID 连边，最多 512 记录/64 成员一条路径；null=未采集，-1=未报告 owner，缺失 owner 不猜名称、不宣称退出，观察环不等同于独立死锁查询。现场写 v3、读 v1/v2/v3；v1 owner ID 保持 null。每页一个线程基线和固定比较，清空/换目标按 generation 丢弃迟到结果；比较报告本身不进入现场。fixture 锁竞争仅显式 MBean 操作，单组 3 线程、总时限 1–120 秒，可提前释放/重复启动清理。
 - Timeline 复用现有采样；每页 120 点，冻结最多额外固定 120 点，按采集顺序选区间，换目标/离线打开清冻结视图。v3 保存最多 120 个指标样本，5 MiB 文件上限；保存区间仅指标/身份/备注，普通快照可另带线程。旧文件不补历史。GC 是累计近似采集时间，不当暂停；缺失、单位变化、时窗异常和计数回退抑制相应差值。`scripts/capture-timeline-demo.ps1` 生成真实 8 点/4 点现场，含主动采样空档，自动清理自有认证 fixture。
 - 搜索过滤不得因恢复选择重复远程读取；无选择时清详情，比较结果不得被实时采样覆盖。源码定位保留合法 `$`、经附加源码导航；匿名/局部类外层候选须明确确认，不能宣称版本匹配。
-- JFR 每连接仅管理自有 recording；启动前设 5–120 s duration/maxAge、32 MiB disk retention、dumpOnExit=false，不指定目标文件。创建/配置/启动不自动重试，失败保留已知 ID；断连先非阻塞 cancel 再借连接许可清理，不能承诺网络失败后已释放。仅 STOPPED 可流下载，64 KiB block / 64 MiB / 45 s 循环预算、60 s UI 截止；不覆盖文件、不使用 copyTo 或 recording ID 0。局部 JFR 操作失败需刷新状态。RecordingInfo duration/maxAge 单位为秒。离线库存限制 64 MiB/200k events/256 types/5 s 扫描，JDK 单次解析不是硬资源隔离；不保留字段/栈，不把事件数当 CPU 占比或完整覆盖，不自动脱敏。`scripts/capture-jfr-demo.ps1` 生成并清理自有认证目标的真实录制。
+- JFR 每连接仅管理自有 recording；启动前设 5–120 s duration/maxAge、32 MiB disk retention、dumpOnExit=false，不指定目标文件。创建/配置/启动不自动重试，失败保留已知 ID；断连先非阻塞 cancel 再借连接许可清理，不能承诺网络失败后已释放。仅 STOPPED 可流下载，64 KiB block / 64 MiB / 45 s 循环预算、60 s UI 截止；不覆盖文件、不使用 copyTo 或 recording ID 0。局部 JFR 操作失败需刷新状态。RecordingInfo duration/maxAge 单位为秒。离线库存限制 64 MiB/200k events/256 types/5 s 扫描，JDK 单次解析不是硬资源隔离；不保留 JDK recorded 对象，不把事件数当 CPU 占比或完整覆盖，不自动脱敏。`scripts/capture-jfr-demo.ps1` 生成并清理自有认证目标的 8 秒 profile/有时限 CPU 脉冲真实录制。
+- JFR 栈与库存同次扫描；仅 ExecutionSample/NativeMethodSample，使用 sampledThread，分 kind 统计。每页一份不可变副本：20k samples/200k frame refs/128 depth/256 threads/8192 unique frames/2 Mi 字符元数据，单名字/descriptor 512 字符。树 8192 nodes，超限拒绝整路径计遗漏，不伪造 self；class ID+descriptor+line 键、递归保留路径、截断加未知根。筛选在 LOCAL_IO；换文件/目标 generation 丢迟到结果；高亮/缩放不改分母。源码不猜文件名，精确类+descriptor+方法所属行且唯一候选后确认，版本/loader 仍未验证。载入后收起 Capture controls 不停止录制；图表配键盘 Call tree。测试写 JFR 必须用独立子 JVM，不能在 IDE 测试宿主启动永久 JFR 线程。
 - 自动测试仅连接自己启动、finally 清理的 fixture；远程 fixture 仅 loopback 且认证，不测试未知业务进程。
 - 调研与决策见 `docs/research.md`、`docs/decisions.md`；自动检查汇总见 `docs/validation.md`，具体 GUI 证据按版本集中在 `docs/gui-validation.md`，不得从旧构建外推新包通过；使用方法见 `README.md`。
 - 不搬运竞品代码或资源；修改后运行相关测试、构建，并据实记录未验证项。

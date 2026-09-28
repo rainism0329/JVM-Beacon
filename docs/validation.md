@@ -1,8 +1,29 @@
-# 0.10.0 验证与接续状态
+# 0.11.0 验证与接续状态
 
 日期：2026-09-28，Windows 11 x64。这是**功能开发预览**，完成了下列具体场景，尚未完成全部验收或整个产品愿景。历史记录按版本保留，不由旧构建外推新包通过。
 
-## 0.10.0 当前验证
+## 0.11.0 当前验证
+
+交付本地 JFR sampled-stack 分析：按 Java/native event kind 分开，线程筛选、调用树、可缩放火焰图、高亮和源码候选；有缺失/截断/保留预算说明。不是完整 profiler，也不是 CPU 耗时百分比。README/testing 有复测步骤，下一阶段见 decisions。
+
+最终 [jvm-beacon-0.11.0.zip](../build/distributions/jvm-beacon-0.11.0.zip)：**2026-09-28 13:14:31 +08:00，379,757 bytes**，SHA-256 `9e17d7e4059cc8dfefb83172104bae8b384366cf185cf1e9688f8d112cf6023e`。包内与最终 IC 实际加载 JAR 均为 `506706d18311e5194061ae677c9df4af4bb3060fbf3409d17dff78fd22a305ed`。[产物核对](../build/reports/release-checks-0.11.0.json)。无 Release/Marketplace 发布。
+
+| 检查 | 本轮实际结果与边界 |
+|---|---|
+| 完整自动回归与构建 | 最终源码 `test buildPlugin verifyPlugin` exit 0；**113/113，0 失败/错误/跳过**。[日志](../build/reports/checks-0.11.0.txt) |
+| 新增核心/集成 | 6 个 JfrStacks 单测覆盖递归、self 守恒、kind/线程/descriptor/class ID 隔离、树限额、取消、真实 consumer 帧顺序/缺失栈、保留预算、截断；1 个真实认证 loopback profile 测试验证 CPU fixture 方法及 sampledThread。全部子 JVM finally 清理 |
+| UI 自动回归 | 2 个测试：busy 不提交、清空丢弃迟到结果；从深层滚动后缩放/重置回到新根。不将组件测试称为 IDE 加载验收 |
+| 官方 Verifier 1.408 | IC 与 IU **251.26927.53 均 Compatible**。仍保留既有 SslRMIClientSocketFactory 的 JDK 8 规则 deprecated 提示和 IDE layout 警告，未压制；JDK 21 的真实 TLS 回归通过，不外推所有 JDK |
+| 实际加载与 GUI | 最终包 IC/JBR 21/Windows，**13:15:16.938** 加载，**13:22:54.437** 正常退出，runIde exit 0；此段 ERROR 级日志 **0**，平台 WARN 保留。[日志](../build/reports/ide-load-0.11.0.txt)。Light/Dark、筛选/高亮/滚动/缩放、键盘树、源码候选成功/空数据/坏文件见 [GUI 记录](gui-validation.md) |
+| 独立真实演示 | `capture-jfr-demo.ps1` exit 0、JFR_CAPTURE_PASS；自有认证 PID **22092**，profile 8 秒自动停止、下载、释放、退出。文件 **360,692 bytes / 4,637 events**，ExecutionSample **4**（CPU 线程 3）、NativeMethodSample **388**，全部扫描到 EOF，无遗漏；[目录](../build/examples/jfr-20260928-125558-062/) |
+
+失败与修正：第一轮 deterministic 录制测试在 IDE 测试宿主启动 JFR，触发 JDK 常驻 JFR 线程的 ThreadLeakTracker 失败；改为独立子 JVM 后通过，没有关闭泄漏检测。GUI 候选发现图表被长说明挤压、Zoom 沿用旧滚动位置，分别修复收起控制区/压缩详情和 viewport 回根，最终包重验。无采样 GUI 文件第一次在受限 shell 中因 JFR 默认临时目录 AccessDeniedException 未生成，授权的独立测试进程重跑成功；不记成第一次通过。
+
+资源预算与本机观察：全局本地 I/O 仍 2 线程无队列，分析不增加网络线程/定时器，文件扫描沿用 64 MiB/200k events/5 s 软检查；模型/树上限见 AGENTS。使用同机 Corretto 21.0.9、独立 `java -Xmx128m`，对上面 360,692 字节文件做扫描及两类聚合，首轮 **196.188 ms**，随后 **46.420 / 25.631 / 22.806 ms**（未手工 GC），各次均 392 保留样本且 EOF。[原输出](../build/reports/jfr-analysis-observation-0.11.0.txt)。当时其他构建工作并行；这是小文件资源观察，不是严格基准、峰值内存测量、IDE 总开销或 64 MiB 压测。预算目标是每页有界、8 秒 UI 等待截止；无法保证单次 JDK 解析立即取消。
+
+未验证/未实现：Ultimate GUI、更多 IDE/JDK/OS、真实 WAN/JFR-over-TLS、大文件及 8 页压力、长时资源/动态卸载、完整无障碍、窄窗口矩阵、所有元数据限额的极端文件；本轮没有重跑录制按钮的全部 GUI 流程（核心录制回归已跑）。没有时间区间筛选、分配火焰图、GC/锁事件关联、JFR 合并或 AI 根因。源码只验证一份匹配 fixture 的成功路径，版本/loader 与匿名隐藏类不作自动保证。继续优先 GC/分配事件语义与时间线，再做锁事件和 Run/Debug 关联。
+
+## 0.10.0 历史验证
 
 新增自有 JFR 录制的创建/限时自动停止/提前停止/下载/释放，以及离线事件库存表、搜索排序和详细报告。未实现调用树/火焰图，也未将 JMC 当作内置引擎；后续路线见 decisions。
 
