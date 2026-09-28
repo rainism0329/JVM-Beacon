@@ -83,7 +83,7 @@ class JmxClientIntegrationTest {
             assertTrue(client.queryNames().stream().anyMatch(name -> name.contains("dev.jvmbeacon.demo")));
             assertFalse(client.namesTruncated());
             var attributes = client.readAttributes(BEAN);
-            assertTrue(attributes.stream().anyMatch(value -> value.name().equals("Forbidden") && value.error().contains("Permission")));
+            assertTrue(attributes.stream().anyMatch(value -> value.name().equals("Forbidden") && value.error().contains("[TARGET]")));
             assertTrue(attributes.stream().anyMatch(value -> value.name().equals("Broken") && value.error() != null));
             assertTrue(attributes.stream().anyMatch(value -> value.value() instanceof CompositeData && ValueFormatter.format(value.value()).contains("counter")));
             assertTrue(attributes.stream().anyMatch(value -> value.value() instanceof TabularData && ValueFormatter.format(value.value()).contains("current")));
@@ -134,6 +134,44 @@ class JmxClientIntegrationTest {
             }
             for (int i = 0; i < 8; i++) try (JmxClient client = fixture.remote("operator")) { client.subscribe(BEAN); client.sample(); client.unsubscribe(BEAN); }
         }
+    }
+
+    @Test void getterSecurityIoAndTlsFailuresRemainTargetErrorsAndKeepConnectionUsable() throws Exception {
+        try (FixtureProcess fixture = new FixtureProcess(true); JmxClient client = fixture.remote("observer")) {
+            var attributes = client.readAttributes(BEAN);
+            for (String name : List.of("DeniedNumber", "IoFailureNumber", "TlsFailureNumber", "ErrorFailureNumber")) {
+                var attribute = attributes.stream().filter(value -> value.name().equals(name)).findFirst().orElseThrow();
+                assertNull(attribute.value(), name);
+                assertTrue(attribute.error().contains("[TARGET]"), attribute.error());
+                var reading = client.readNumericAttribute(BEAN, name);
+                assertNull(reading.plotted(), name);
+                assertTrue(reading.error().contains("[TARGET]"), reading.error());
+                assertFalse(reading.error().contains("Fixture"), "Raw target exception text must remain excluded.");
+            }
+            assertEquals("7", client.readNumericAttribute(BEAN, "Counter").exact());
+            assertTrue(client.sample().metrics().stream().anyMatch(JmxClient.Metric::available));
+        }
+    }
+
+    @Test void safeAttributeErrorsPrioritizeTargetWrappersOverTheirNestedCauses() {
+        String secret = "password=must-not-appear";
+        AssertionError targetError = new AssertionError(secret, new IOException(secret));
+        for (Throwable failure : List.of(
+                new javax.management.RuntimeMBeanException(new SecurityException(secret)),
+                new javax.management.MBeanException(new IOException(secret)),
+                new javax.management.MBeanException(new javax.net.ssl.SSLException(secret)),
+                new javax.management.RuntimeErrorException(targetError),
+                new java.lang.reflect.UndeclaredThrowableException(new javax.management.MBeanException(new java.net.ConnectException(secret))))) {
+            String text = JmxClient.safeError(failure);
+            assertTrue(text.startsWith("[TARGET]"), text);
+            assertFalse(text.contains(secret));
+            assertFalse(text.contains("Permission or authentication denied"));
+            assertFalse(text.contains("TLS handshake failed"));
+            assertFalse(text.contains("Connection refused"));
+        }
+        assertTrue(JmxClient.safeError(new SecurityException(secret)).contains("Permission or authentication denied"));
+        assertTrue(JmxClient.safeError(new IOException(new javax.net.ssl.SSLException(secret))).contains("TLS handshake failed"));
+        assertTrue(JmxClient.safeError(new java.net.ConnectException(secret)).contains("Connection refused"));
     }
 
     @Test void localAttachRequiresExplicitAgentStartAndTargetExitPropagates() throws Exception {

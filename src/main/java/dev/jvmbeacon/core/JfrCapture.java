@@ -7,6 +7,8 @@ import javax.management.MBeanServerConnection;
 import javax.management.ObjectName;
 import java.io.IOException;
 import java.io.InterruptedIOException;
+import java.io.OutputStream;
+import java.io.FilterOutputStream;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
@@ -21,11 +23,19 @@ public final class JfrCapture implements AutoCloseable {
     public static final long DOWNLOAD_BYTES = 64L * 1024 * 1024;
     private final MBeanServerConnection server;
     private final FlightRecorderMXBean recorder;
+    private final OutputFactory outputs;
     private final AtomicBoolean cancelled = new AtomicBoolean();
     private long ownedId;
 
     JfrCapture(MBeanServerConnection server) {
+        this(server, Files::newOutputStream);
+    }
+
+    @FunctionalInterface interface OutputFactory { OutputStream open(Path path) throws IOException; }
+
+    JfrCapture(MBeanServerConnection server, OutputFactory outputs) {
         this.server = server;
+        this.outputs = outputs;
         recorder = JMX.newMXBeanProxy(server, objectName(), FlightRecorderMXBean.class);
     }
 
@@ -97,15 +107,18 @@ public final class JfrCapture implements AutoCloseable {
         if (current.id() == 0 || !"STOPPED".equals(current.state()))
             throw new IllegalStateException("Refresh and stop this session's recording before downloading.");
         Path target = destination.toAbsolutePath().normalize();
-        if (Files.exists(target, LinkOption.NOFOLLOW_LINKS)) throw new java.nio.file.FileAlreadyExistsException(target.toString());
-        Path temporary = Files.createTempFile(target.getParent(), ".jvm-beacon-", ".partial");
+        Path temporary = localFile(() -> {
+            if (Files.exists(target, LinkOption.NOFOLLOW_LINKS)) throw new java.nio.file.FileAlreadyExistsException(target.toString());
+            return Files.createTempFile(target.getParent(), ".jvm-beacon-", ".partial");
+        });
         long stream = -1;
         long end = System.nanoTime() + 45_000_000_000L;
+        Throwable failure = null;
         try {
             check();
             stream = recorder.openStream(ownedId, Map.of("blockSize", "65536"));
             long total = 0;
-            try (var output = Files.newOutputStream(temporary)) {
+            try (var output = localOutput(temporary)) {
                 while (true) {
                     check();
                     if (System.nanoTime() >= end) throw new InterruptedIOException("JFR transfer exceeded 45 seconds.");
@@ -120,12 +133,41 @@ public final class JfrCapture implements AutoCloseable {
             if (total == 0) throw new TransferLimitException();
             long closing = stream; stream = -1; recorder.closeStream(closing);
             check();
-            Files.move(temporary, target); // No REPLACE_EXISTING, including at the final publication step.
+            localFile(() -> Files.move(temporary, target)); // No REPLACE_EXISTING, including at the final publication step.
             return target;
+        } catch (IOException | RuntimeException | Error error) {
+            failure = error; throw error;
         } finally {
+            Throwable streamFailure = null;
             try { if (stream >= 0) recorder.closeStream(stream); }
-            finally { Files.deleteIfExists(temporary); }
+            catch (IOException | RuntimeException | Error error) { streamFailure = error; throw error; }
+            finally {
+                try { localFile(() -> Files.deleteIfExists(temporary)); }
+                catch (LocalFileException cleanup) {
+                    if (streamFailure != null) streamFailure.addSuppressed(cleanup);
+                    else if (failure != null) failure.addSuppressed(cleanup);
+                    else throw cleanup;
+                }
+            }
         }
+    }
+
+    /** Only locally executed file operations use this marker; target read/close failures stay transport errors. */
+    public static final class LocalFileException extends IOException {
+        public LocalFileException(Throwable cause) { super("Local JFR file access failed.", cause); }
+    }
+    @FunctionalInterface private interface LocalFileCall<T> { T call() throws IOException; }
+    private static <T> T localFile(LocalFileCall<T> call) throws LocalFileException {
+        try { return call.call(); }
+        catch (IOException | SecurityException error) { throw new LocalFileException(error); }
+    }
+    private OutputStream localOutput(Path path) throws LocalFileException {
+        return new FilterOutputStream(localFile(() -> outputs.open(path))) {
+            @Override public void write(int value) throws IOException { localFile(() -> { out.write(value); return null; }); }
+            @Override public void write(byte[] value, int offset, int length) throws IOException { localFile(() -> { out.write(value, offset, length); return null; }); }
+            @Override public void flush() throws IOException { localFile(() -> { out.flush(); return null; }); }
+            @Override public void close() throws IOException { localFile(() -> { out.close(); return null; }); }
+        };
     }
 
     /** Cancels future steps before queued cleanup runs. A remote call may still be executing. */

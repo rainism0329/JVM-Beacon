@@ -13,6 +13,7 @@ import java.util.stream.Collectors;
 /** Versioned, size-limited plain data. No Java object deserialization, class loading, or embedded paths. */
 public final class SnapshotStore {
     public static final int MAX_BYTES = 5 * 1_024 * 1_024;
+    private static final Set<String> CUMULATIVE_METRICS = Set.of("gc.count", "gc.time", "cpu.time", "runtime.uptime");
     public static final String REDACTION_NOTICE = "Export includes JVM identity, metric values, thread names/locks/class and source-file names, and your notes. It excludes connection URLs, credentials, system properties, command-line arguments, arbitrary MBean values and notifications. Thread names and notes can contain sensitive text and are not automatically redacted; review before sharing.";
 
     public record Snapshot(Identity identity, Sample sample, ThreadDump threads, String notes, List<Sample> history) {
@@ -217,18 +218,21 @@ public final class SnapshotStore {
     }
 
     public static String compare(Snapshot before, Snapshot after) {
-        boolean sameRuntime = before.identity.runtimeName().equals(after.identity.runtimeName());
-        boolean sameInstance = before.identity.equals(after.identity);
+        ConnectionIdentity.Match match = ConnectionIdentity.compare(before.identity, after.identity);
+        boolean sameRuntime = Objects.equals(before.identity.runtimeName(), after.identity.runtimeName());
+        boolean sameInstance = match == ConnectionIdentity.Match.SAME_REPORTED_IDENTITY;
         StringBuilder result = new StringBuilder();
-        if (sameInstance) result.append("Same observed runtime name and JVM start time. This is a best-effort identity match.\n");
+        if (match == ConnectionIdentity.Match.INCOMPLETE) result.append("Target identity is missing or incomplete. Metric deltas are unavailable; matching incomplete fields do not establish the same JVM.\n");
+        else if (sameInstance) result.append("Same reported runtime name, JVM start time, VM name and version. This is a best-effort identity match, not target authentication.\n");
         else if (sameRuntime && before.identity.startTime() != after.identity.startTime()) result.append("Same runtime label but different JVM start times: restart or PID reuse. Thread IDs and cumulative deltas are not comparable.\n");
         else if (sameRuntime) result.append("Same runtime label but different VM metadata: target identity is uncertain. Thread IDs and cumulative deltas are not comparable.\n");
         else result.append("Different runtime labels: captures may be from different targets. Thread IDs and cumulative deltas are not compared.\n");
         result.append("Before capture: ").append(before.captureStart()).append(" – ").append(before.captureEnd()).append(" epoch ms\n");
         result.append("After capture: ").append(after.captureStart()).append(" – ").append(after.captureEnd()).append(" epoch ms\n");
-        result.append("Metric comparison uses each capture's last acquired sample. Inspect earlier observations in Timeline.\n");
+        result.append("Metric comparison uses each capture's last acquired sample. Changes are endpoint differences, not rates; CPU load changes are percentage points. Inspect earlier observations in Timeline.\n");
         if (before.sample == null || after.sample == null) result.append("Metrics: missing in at least one snapshot.\n");
         else {
+            CaptureTimeline endpoints = new CaptureTimeline(List.of(before.sample, after.sample));
             Map<String, Metric> baseline = before.sample.metrics().stream().collect(Collectors.toMap(Metric::key, metric -> metric));
             for (Metric current : after.sample.metrics()) {
                 Metric previous = baseline.get(current.key());
@@ -236,10 +240,15 @@ public final class SnapshotStore {
                 if (previous == null || !previous.available() || !current.available() || !previous.unit().equals(current.unit())) result.append("not comparable (missing, unavailable or different units)");
                 else {
                     result.append(previous.value()).append(" → ").append(current.value()).append(' ').append(current.unit());
-                    if (sameInstance) result.append("; Δ ").append(new BigDecimal(current.value().toString()).subtract(new BigDecimal(previous.value().toString())).stripTrailingZeros().toString());
+                    if (sameInstance) {
+                        CaptureTimeline.Change change = endpoints.change(new CaptureTimeline.Track(current.key(), current.label(), current.unit(), "", CUMULATIVE_METRICS.contains(current.key())));
+                        if (change.delta().equals("—")) result.append("; change unavailable: ").append(change.evidence());
+                        else result.append("; Δ ").append(change.delta());
+                    }
                 }
                 result.append('\n');
             }
+            result.append("Metric deltas require matching complete identity, non-overlapping capture windows in acquisition order, available values and equal units. Cumulative counter decreases suppress the delta; endpoint-only comparison cannot detect intervening resets. GC collection time is approximate cumulative time, not pause duration.\n");
         }
         result.append(ThreadComparison.describeComparison(before, after));
         result.append("Captures are separate observations, not continuous history or proof of a root cause.");

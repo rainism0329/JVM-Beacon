@@ -78,6 +78,26 @@ class ThreadComparisonTest {
         assertTrue(text.contains("virtual threads are not covered"));
     }
 
+    @Test void placeholderIdentityHasTheSameUnavailableMeaningForMetricsAndThreads() {
+        var metricA = new JmxClient.Sample(2_000, 2_010, List.of(new JmxClient.Metric("heap.used", "Heap used", 10L, "bytes", null)));
+        var metricB = new JmxClient.Sample(3_000, 3_010, List.of(new JmxClient.Metric("heap.used", "Heap used", 20L, "bytes", null)));
+        for (Identity placeholder : List.of(new Identity("—", 1_000, "VM", "21"),
+                new Identity("fixture", 1_000, "—", "21"), new Identity("fixture", 1_000, "VM", "—"))) {
+            for (Identity[] pair : List.of(new Identity[]{placeholder, placeholder},
+                    new Identity[]{placeholder, IDENTITY}, new Identity[]{IDENTITY, placeholder})) {
+                Report threads = ThreadComparison.compare(pair[0], sample(), pair[1], sample());
+                assertEquals(Status.MISSING_IDENTITY, threads.status()); assertNull(threads.counts());
+                assertTrue(threads.differences().isEmpty());
+                String snapshot = SnapshotStore.compare(new SnapshotStore.Snapshot(pair[0], metricA, sample(), ""),
+                        new SnapshotStore.Snapshot(pair[1], metricB, sample(), ""));
+                assertTrue(snapshot.contains("Metric deltas are unavailable"));
+                assertTrue(snapshot.contains("thread IDs cannot be compared"));
+                assertFalse(snapshot.contains("; Δ"));
+                assertFalse(snapshot.contains("Captured scope:"));
+            }
+        }
+    }
+
     @Test void truncatedAbsenceRemainsAnObservationRatherThanThreadTermination() {
         Report report = ThreadComparison.compare(IDENTITY, sample(), IDENTITY, dump(3_000, 3_010, true, List.of()));
         assertTrue(report.inputTruncated()); assertEquals(1, report.counts().noLongerObserved());

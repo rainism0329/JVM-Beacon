@@ -372,6 +372,7 @@ public final class JmxClient implements AutoCloseable {
     }
 
     public static String safeError(Throwable failure) {
+        if (isTargetFailure(failure)) return "[TARGET] The MBean returned an exception. Check its implementation constraints and server logs. The request may have had partial effects.";
         Throwable current = failure;
         for (int i = 0; i < 12 && current != null; i++, current = current.getCause()) {
             if (current instanceof SecurityException) return "Permission or authentication denied. Check server-side credentials and access rules.";
@@ -388,9 +389,16 @@ public final class JmxClient implements AutoCloseable {
     }
 
     private static String bounded(String value, int max) { return value == null ? "" : value.substring(0, Math.min(value.length(), max)); }
+    private static boolean isTargetFailure(Throwable failure) {
+        for (int i = 0; i < 12 && failure != null; i++, failure = failure.getCause()) {
+            if (failure instanceof MBeanException || failure instanceof RuntimeMBeanException || failure instanceof RuntimeErrorException) return true;
+        }
+        return false;
+    }
     private static void throwConnectionFailure(Throwable failure) throws IOException {
-        // An MBean may itself throw an IOException; MBeanException keeps that as an attribute/operation error.
-        if (failure instanceof MBeanException || failure instanceof RuntimeMBeanException) return;
+        // Target getters can throw transport-looking exceptions, including through another wrapper.
+        // Preserve them as value errors; only actual transport failures invalidate the connection.
+        if (isTargetFailure(failure)) return;
         Throwable current = failure;
         for (int i = 0; i < 12 && current != null; i++, current = current.getCause()) {
             if (current instanceof IOException io) throw io;

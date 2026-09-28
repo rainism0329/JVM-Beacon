@@ -1,6 +1,20 @@
-# GUI 验证记录：0.1.2—0.14.0
+# GUI 验证记录：0.1.2—0.14.1
 
 最近日期：**2026-09-28**，时区 Asia/Shanghai（UTC+08:00）。这是部分真实界面流程的观察记录，**不代表全部 GUI 验收通过**。自动测试、安装包及兼容性检查另见 [验证与接续状态](validation.md)。
+
+## 0.14.1：现有功能审查后的真实流程
+
+最终包 **17:21:59** 构建，**17:23:02.606—17:30:49.364** 在独立 IC 2025.1.3 / JBR 21 / Windows 运行，1388×974 / 125% / Light。ZIP 内与已加载 JAR 哈希一致；runIde exit 0、ERROR 0。只连接本次启动的 Corretto 21.0.9 PID **26012**，600 秒上限，无远程端口。修复前 0.14.0 的基线截图单列在 [审查记录](audit-2026-09-28.md)，不混用。
+
+1. **本地连接与趋势：正常。** 手输自有 PID、明确允许本地管理代理后成功；开启 Auto，真实 getter 批次读取成功。操作失败后再看 [Telemetry](../build/reports/audit-0.14.1/final-trend.png)，仍 LIVE、Auto 勾选、41 个样本且有新采集时间，确认期间空档断线。
+2. **受控操作：本轮修复有效。** Read-only 下 Invoke，等待 4.5 秒后[提示仍保留](../build/reports/audit-0.14.1/final-readonly.png)。关闭观察模式，选 `fail()`，确认框停留 5 秒再 Execute once；等待 4.5 秒后[结果不再 pending](../build/reports/audit-0.14.1/final-failure.png)，显示 TARGET、保持 LIVE；底部错误未被自动采样覆盖。结果区域仍偏矮，这是下一步布局改进项。
+3. **平台线程：正常。** Capture threads 得到 [16 条平台线程](../build/reports/audit-0.14.1/final-threads.png)，独立窗口 17:27:04.112–17:27:04.149；未报告 deadlock 同时明确不能排除其他阻塞/虚拟线程问题。此轮未做源码跳转或 Hot threads GUI 全流程。
+4. **JFR 录制下载：正常。** Auto 开启时 Check / refresh，Record [确认框](../build/reports/audit-0.14.1/final-jfr-confirm.png)停留 5 秒后 Start recording，实际 [RUNNING #1 / 30 s](../build/reports/audit-0.14.1/final-jfr-running.png)；到时重新查询 STOPPED，下载到新的 `final-recording.jfr`，[本地库存](../build/reports/audit-0.14.1/final-tabs.png)解析 4,721 events / 339,500 bytes / EOF。默认预设真实产生的数据，不是有负载代表性的性能基准。
+5. **保存、重开与多页：正常。** 添加说明后[保存现场](../build/reports/audit-0.14.1/final-saved.png)，新建第二页重新打开，显示 [82 样本 / 3 个 >5 s 空档 / OFFLINE](../build/reports/audit-0.14.1/final-reopened.png)。[身份、指标/线程各自时窗与备注](../build/reports/audit-0.14.1/final-notes.png)保留。切回第一页仍 LIVE；关闭第一页后[离线页继续存在](../build/reports/audit-0.14.1/final-tab-closed.png)。在目标结束前以 `jcmd 26012 JFR.check` 核对，无可用录制，说明本次自有录制已释放。最后正常退出的仅为本项目沙箱。
+
+文件：[GUI 保存现场](../build/reports/audit-0.14.1/final-capture.jvmb)、[GUI 下载录制](../build/reports/audit-0.14.1/final-recording.jfr)。均含自有测试目标标识，未自动脱敏；不上传到仓库。
+
+边界：未演练所有失败/取消/选择往返组合、最终 Dark、多缩放、完整键盘/屏幕阅读器、8 页/最大文件、IU GUI。文件选择取消与 busy、JFR 本地写失败、Rows 长字段等按组件/核心测试报告。原生系统文件对话框采用系统深色，与 IDEA Light 不同，不是插件绘制白色分隔的问题。
 
 ## 0.14.0：统一时间区间与事件聚焦
 

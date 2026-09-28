@@ -30,6 +30,7 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.concurrent.Callable;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 /** Explicit JFR workflow: no extra executor, polling timer or automatic recording. */
 final class JfrPanel extends JPanel {
@@ -39,6 +40,7 @@ final class JfrPanel extends JPanel {
     private final Project project;
     private final Jobs jobs;
     private final Consumer<String> status;
+    private final ConfirmationGate confirmations;
     private final JfrStacksPanel stacks;
     private final JfrWaitsPanel waits;
     private final JfrMemoryPanel memory;
@@ -75,12 +77,15 @@ final class JfrPanel extends JPanel {
     private long localGeneration;
 
     JfrPanel(Project project, com.intellij.openapi.Disposable owner, Jobs jobs, Consumer<String> status) {
+        this(project, owner, jobs, status, new ConfirmationGate());
+    }
+    JfrPanel(Project project, com.intellij.openapi.Disposable owner, Jobs jobs, Consumer<String> status, ConfirmationGate confirmations) {
         super(new BorderLayout(JBUI.scale(10), JBUI.scale(10)));
-        this.project = project; this.jobs = jobs; this.status = status;
+        this.project = project; this.jobs = jobs; this.status = status; this.confirmations = confirmations;
         stacks = new JfrStacksPanel(jobs, frame -> SourceNavigator.navigateJfr(project, owner, frame, status), status);
-        waits = new JfrWaitsPanel(jobs, frame -> SourceNavigator.navigateJfr(project, owner, frame, status), status, this::focusEvent);
+        waits = new JfrWaitsPanel(jobs, frame -> SourceNavigator.navigateJfr(project, owner, frame, status), status, this::focusEvent, confirmations);
         memory = new JfrMemoryPanel(this::focusEvent);
-        rangeBar = new JfrRangeBar(open, captureToggle, this::applyRange);
+        rangeBar = new JfrRangeBar(open, captureToggle, this::applyRange, confirmations);
         setBorder(JBUI.Borders.empty(12, 16));
         JPanel top = BeaconUi.panel(8);
         top.add(rangeBar, BorderLayout.NORTH);
@@ -163,7 +168,10 @@ final class JfrPanel extends JPanel {
         open.addActionListener(e -> {
             var descriptor = FileChooserDescriptorFactory.createSingleFileDescriptor("jfr");
             descriptor.setTitle("Open trusted local JFR · Runtime evidence (64 MiB limit)");
-            FileChooser.chooseFile(descriptor, project, null, file -> analyze(Path.of(file.getPath())));
+            openLocal(() -> {
+                var file = FileChooser.chooseFile(descriptor, project, null);
+                return file == null ? null : Path.of(file.getPath());
+            });
         });
         copyPath.addActionListener(e -> { if (localFile != null) CopyPasteManager.getInstance().setContents(new StringSelection(localFile.toString())); });
         copySummary.addActionListener(e -> CopyPasteManager.getInstance().setContents(new StringSelection(inventory.getText())));
@@ -208,7 +216,7 @@ final class JfrPanel extends JPanel {
     }
     private void run(String label, long deadline, Remote operation) {
         JmxClient active = client;
-        if (active == null || busy) return;
+        if (!ready(active, false, label)) return;
         jobs.run(label, true, deadline, () -> operation.call(active.jfr()), this::show, this::failed);
     }
 
@@ -237,16 +245,24 @@ final class JfrPanel extends JPanel {
 
     private boolean confirm(String title, String impact) {
         JmxClient active = client;
-        if (active == null || busy || readOnly) return false;
-        boolean accepted = Messages.showYesNoDialog(project, "Target: " + active.identity().runtimeName()
+        if (!ready(active, true, title)) return false;
+        boolean accepted = confirmations.show(() -> Messages.showYesNoDialog(project, "Target: " + active.identity().runtimeName()
                 + "\nRecording: " + (state == null ? "Unknown" : state.id()) + "\n\n" + impact,
-                title, "Confirm", "Cancel", Messages.getWarningIcon()) == Messages.YES;
-        return accepted && client == active && !busy && !readOnly;
+                title, "Confirm", "Cancel", Messages.getWarningIcon())) == Messages.YES;
+        return accepted && ready(active, true, title);
+    }
+
+    private boolean ready(JmxClient expected, boolean mutation, String action) {
+        if (busy) { status.accept(action + " was not submitted because another request is running. Review and confirm again after it finishes."); return false; }
+        if (client == null || client != expected) { status.accept(action + " was not submitted because the target disconnected or changed. Verify the target again."); return false; }
+        if (mutation && readOnly) { status.accept(action + " was not submitted because Read-only is on. Review the target before changing it."); return false; }
+        return true;
     }
 
     private void startRecording() {
         JmxClient active = client;
-        if (active == null || readOnly || busy || state == null) return;
+        if (!ready(active, true, "Start recording")) return;
+        if (state == null) { status.accept("Check Flight Recorder support before starting a recording. Nothing was submitted."); return; }
         JComboBox<String> presets = new JComboBox<>(state.configurations().toArray(String[]::new));
         JSpinner seconds = new JSpinner(new SpinnerNumberModel(30, 5, 120, 5));
         JLabel duration = new JLabel("Duration · seconds"); duration.setLabelFor(seconds);
@@ -270,7 +286,7 @@ final class JfrPanel extends JPanel {
                 catch (java.text.ParseException invalid) { setErrorText("Enter a duration from 5 to 120 seconds."); }
             }
         };
-        if (dialog.showAndGet() && client == active && !busy && !readOnly) {
+        if (confirmations.show(dialog::showAndGet) && ready(active, true, "Start recording")) {
             String preset = (String) presets.getSelectedItem(); int durationSeconds = (Integer) seconds.getValue();
             run("Start bounded JFR recording (outcome may be unknown on timeout)", 20_000, c -> c.start(preset, durationSeconds));
         }
@@ -278,18 +294,27 @@ final class JfrPanel extends JPanel {
 
     private void download() {
         JmxClient active = client;
-        if (active == null || busy || state == null || !"STOPPED".equals(state.state())) return;
-        var file = FileChooserFactory.getInstance().createSaveFileDialog(new FileSaverDescriptor("Download JFR to a new local file",
+        if (!ready(active, false, "Download JFR")) return;
+        if (state == null || !"STOPPED".equals(state.state())) { status.accept("Download was not submitted. Refresh and verify that the recording is STOPPED first."); return; }
+        var file = confirmations.show(() -> FileChooserFactory.getInstance().createSaveFileDialog(new FileSaverDescriptor("Download JFR to a new local file",
                 "Not redacted. Opens a target stream; up to 64 MiB / 45 s. Existing files are never overwritten.", "jfr"), project)
-                .save((com.intellij.openapi.vfs.VirtualFile) null, "jvm-beacon-" + System.currentTimeMillis() + ".jfr");
-        if (file == null || client != active || busy) return;
+                .save((com.intellij.openapi.vfs.VirtualFile) null, "jvm-beacon-" + System.currentTimeMillis() + ".jfr"));
+        if (file == null || !ready(active, false, "Download JFR")) return;
         jobs.run("Download JFR · No automatic retry", true, 60_000, () -> active.jfr().download(file.getFile().toPath()),
-                path -> { localFile = path; status.accept("JFR saved locally: " + path + ". Target recording retained until release/disconnect."); analyze(path); }, this::failed);
+                path -> { localFile = path; status.accept("JFR saved locally: " + path + ". Target recording retained until release/disconnect."); analyze(path, null, false); }, this::failed);
     }
 
-    void analyze(Path path) { analyze(path, null, false); }
+    void openLocal(Supplier<Path> chooser) {
+        Path path = confirmations.show(chooser);
+        if (path != null) analyze(path);
+    }
+    void analyze(Path path) {
+        if (busy) { status.accept("Local JFR analysis was not submitted because another request is running. Open the file again after it finishes."); return; }
+        analyze(path, null, false);
+    }
     void applyRange(JfrTimeRange range) {
-        if (busy || localReport == null || localFile == null) return;
+        if (busy) { status.accept("The JFR time range was not applied because another request is running. Apply it again after the request finishes."); return; }
+        if (localReport == null || localFile == null) { status.accept("The recording changed or is unavailable. Reopen the recording before applying a range."); return; }
         analyze(localFile, range, true);
     }
     private void focusEvent(Instant start, Instant end) {

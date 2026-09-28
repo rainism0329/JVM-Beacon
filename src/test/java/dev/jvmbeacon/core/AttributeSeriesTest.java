@@ -34,7 +34,17 @@ class AttributeSeriesTest {
         assertEquals(81, series.readings().getFirst().start());
         assertNull(series.readings().getLast().plotted());
         assertThrows(UnsupportedOperationException.class, () -> series.readings().clear());
-        assertThrows(IllegalArgumentException.class, () -> series.add(AttributeSeries.Reading.from(4, 1, 0)));
         series.clear(); assertTrue(series.readings().isEmpty());
+    }
+    @Test void backwardsClockBecomesAnExplicitGapWithoutLosingOriginalTimestamps() {
+        AttributeSeries series = new AttributeSeries();
+        series.add(AttributeSeries.Reading.from(1, 2, 7));
+        var backwards = AttributeSeries.Reading.from(4, 1, 8);
+        series.add(backwards);
+        assertEquals(4, backwards.start()); assertEquals(1, backwards.end());
+        assertNull(backwards.exact()); assertNull(backwards.plotted());
+        assertTrue(backwards.error().contains("clock moved backwards"));
+        assertEquals(backwards, series.readings().getLast());
+        assertNotNull(AttributeSeries.Reading.missing(4, 1, "Read failed").error());
     }
 }

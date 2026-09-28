@@ -56,6 +56,7 @@ public final class BeaconPanel extends JPanel implements Disposable {
     private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS").withZone(ZoneId.systemDefault());
     private final Project project;
     private final SessionRunner runner = new SessionRunner();
+    private final ConfirmationGate confirmations = new ConfirmationGate();
     private final JfrPanel jfr;
     private Connected session;
     private JmxClient client;
@@ -119,6 +120,8 @@ public final class BeaconPanel extends JPanel implements Disposable {
     private final JButton exploreOperation = new JButton("Explore result…");
     private StructuredValue operationStructure;
     private String operationContext = "";
+    private boolean invocationPending;
+    private long operationSelectionGeneration;
     private String inspectedBean;
     private String pendingBean;
     private boolean rebuildingBeanList;
@@ -161,7 +164,7 @@ public final class BeaconPanel extends JPanel implements Disposable {
     public BeaconPanel(Project project) {
         super(new BorderLayout());
         this.project = project;
-        jfr = new JfrPanel(project, this, this::backgroundWithDeadline, this::status);
+        jfr = new JfrPanel(project, this, this::backgroundWithDeadline, this::status, confirmations);
         liveActions.add(timelineLive);
         timelineLive.addActionListener(e -> {
             autoSample.setSelected(!autoSample.isSelected()); updateSamplingTimer();
@@ -239,7 +242,7 @@ public final class BeaconPanel extends JPanel implements Disposable {
         observe.setToolTipText("Client-side guard only. Server authorization still applies; reads may have overhead or side effects.");
         observe.addActionListener(e -> { updateActions(); status(observe.isSelected() ? "Read-only mode is a client-side guard, not server authorization. Reads may still have overhead or side effects." : "Writes and invocations are available. Each request still requires confirmation of its target and parameters."); });
         timer = new javax.swing.Timer(2000, e -> {
-            if (client != null && !runner.isBusy() && isShowing()) {
+            if (client != null && !runner.isBusy() && !confirmations.isPaused() && isShowing()) {
                 if (watching) pollWatch(); else if (autoSample.isSelected()) sampleNow(false);
             }
         });
@@ -407,8 +410,11 @@ public final class BeaconPanel extends JPanel implements Disposable {
         operations.addListSelectionListener(e -> {
             MBeanOperationInfo op = operations.getSelectedValue();
             if (!e.getValueIsAdjusting()) {
+                operationSelectionGeneration++;
+                invocationPending = false;
                 operationStructure = null; exploreOperation.setEnabled(false);
                 if (op != null) operationResult.setText(operationSignature(op) + "\n" + op.getDescription() + "\nMBean impact=" + op.getImpact() + "; metadata is informational and does not guarantee a side-effect-free invocation.");
+                else operationResult.setText("Select an operation to inspect its parameters and result.");
             }
         });
         operations.getEmptyText().setText("Operations for the selected MBean appear here");
@@ -463,6 +469,7 @@ public final class BeaconPanel extends JPanel implements Disposable {
     }
 
     private void startWatch() {
+        if (runner.isBusy()) { status("A request is running. Wait for it to finish before reviewing attribute tracking."); return; }
         int index = attributes.getSelectedRow();
         if (client == null || inspectedBean == null || !Objects.equals(inspectedBean, beans.getSelectedValue())
                 || index < 0 || index >= attributeValues.size()) { status("Select a loaded, readable numeric attribute first."); return; }
@@ -471,11 +478,12 @@ public final class BeaconPanel extends JPanel implements Disposable {
             status("Tracking supports readable numeric scalar attributes only. Arrays, strings and complex objects are not converted to numbers."); return;
         }
         JmxClient active = client; WatchTarget selected = new WatchTarget(inspectedBean, attribute.name(), attribute.type());
-        if (Messages.showYesNoDialog(project, identityLabel() + "\n" + selected.bean() + "\n" + selected.attribute() + " : " + selected.type()
+        if (confirmations.show(() -> Messages.showYesNoDialog(project, identityLabel() + "\n" + selected.bean() + "\n" + selected.attribute() + " : " + selected.type()
                 + "\nRead this getter every 2 seconds while the workbench is visible and idle? Getters may have overhead or side effects."
                 + "\nThis replaces the previous watch and clears its history. Nothing is uploaded or added to snapshot files.",
-                "Watch numeric attribute", "Start tracking", "Cancel", Messages.getQuestionIcon()) != Messages.YES) return;
+                "Watch numeric attribute", "Start tracking", "Cancel", Messages.getQuestionIcon())) != Messages.YES) return;
         if (active != client) { status("The target changed. Select the attribute again."); return; }
+        if (runner.isBusy()) { status("Another request is running. Attribute tracking was not changed. Confirm again after it finishes."); return; }
         watchGeneration++; watchTarget = selected; watchSeries.clear(); watching = true;
         mbeanTabs.setSelectedIndex(3); renderWatch(); updateSamplingTimer();
         if (!runner.isBusy()) pollWatch();
@@ -502,6 +510,7 @@ public final class BeaconPanel extends JPanel implements Disposable {
                 : client == null ? "DISCONNECTED · Captured history is no longer updating."
                 : !autoSample.isSelected() ? "PAUSED · Auto is off. Choose Start live trend or Sample now."
                 : !isShowing() ? "PAUSED · This connection tab is hidden."
+                : confirmations.isPaused() ? "PAUSED · Reviewing a connection or target action; automatic polling resumes after the dialog closes."
                 : runner.isBusy() ? "AUTO · Waiting for the current request; no overlapping calls."
                 : "AUTO · Sampling every 2 s while this connection tab is visible.";
         String age = sample == null ? "No metrics captured yet." : "Last sample: " + time(sample.captureEnd()) + " · "
@@ -533,9 +542,8 @@ public final class BeaconPanel extends JPanel implements Disposable {
             watchSeries.add(result.reading());
             if (result.reading().error() != null) { watching = false; watchGeneration++; updateSamplingTimer(); }
             renderWatch();
-            status(result.reading().error() == null ? "Tracked attribute updated. Its capture window is independent of other metrics."
-                    : "Tracking paused after an unavailable read. Inspect the recorded gap before resuming.");
-        });
+            if (result.reading().error() != null) status("Tracking paused after an unavailable read. Inspect the recorded gap before resuming.");
+        }, false);
     }
 
     private void renderWatch() {
@@ -669,7 +677,7 @@ public final class BeaconPanel extends JPanel implements Disposable {
     private void connect() {
         if (runner.isBusy()) { status("A request is still running. Disconnect or stop waiting before starting another connection."); return; }
         ConnectionDialog dialog = new ConnectionDialog(project);
-        if (!dialog.showAndGet()) return;
+        if (!confirmations.show(dialog::showAndGet)) return;
         ConnectionDialog.Request request = dialog.request();
         connect(request);
     }
@@ -686,7 +694,7 @@ public final class BeaconPanel extends JPanel implements Disposable {
             try {
                 if (secret.value == null) {
                     ConnectionDialog dialog = new ConnectionDialog(project, target);
-                    if (dialog.showAndGet()) connect(dialog.request());
+                    if (confirmations.show(dialog::showAndGet)) connect(dialog.request());
                 } else connect(reconnectRequest(target, secret.take()));
             } finally { secret.close(); }
         });
@@ -706,7 +714,11 @@ public final class BeaconPanel extends JPanel implements Disposable {
     }
 
     private void connect(ConnectionDialog.Request request) {
-        if (disposed || runner.isBusy()) { request.erasePassword(); return; }
+        if (disposed || runner.isBusy()) {
+            request.erasePassword();
+            if (!disposed) status("Another request is running. The connection was not started. Wait for it to finish, then connect again.");
+            return;
+        }
         releaseSession();
         lastTarget = request.target(request.previous()); identityNotice = null;
         connectionProblem = null; connectStarted = System.nanoTime();
@@ -782,6 +794,11 @@ public final class BeaconPanel extends JPanel implements Disposable {
     }
 
     private void releaseSession() {
+        if (invocationPending) {
+            invocationPending = false;
+            operationResult.setText("Stopped waiting for this invocation. Its outcome is unknown; the target may still be executing. Inspect the target before another invocation.");
+            operationResult.setCaretPosition(0);
+        }
         connectionStage = new AtomicReference<>(); // Late worker progress must not resurrect a cancelled connection.
         timer.stop(); autoSample.setSelected(false); runner.cancel();
         Connected old = session; session = null; client = null;
@@ -792,13 +809,21 @@ public final class BeaconPanel extends JPanel implements Disposable {
         observe.setSelected(true); updateActions();
     }
 
-    private <T> void background(String label, boolean network, Callable<T> work, Consumer<T> success) {
-        backgroundWithDeadline(label, network, 8_000, work, success, ignored -> {});
+    private <T> boolean background(String label, boolean network, Callable<T> work, Consumer<T> success) {
+        return background(label, network, work, success, true);
     }
 
-    private <T> void backgroundWithDeadline(String label, boolean network, long deadline, Callable<T> work, Consumer<T> success, Consumer<String> failure) {
-        if (disposed) return;
-        if (!runner.submit(network ? SessionRunner.Lane.NETWORK : SessionRunner.Lane.LOCAL_IO, label, deadline, work, value -> {
+    private <T> boolean background(String label, boolean network, Callable<T> work, Consumer<T> success, boolean showProgress) {
+        return backgroundWithDeadline(label, network, 8_000, work, success, ignored -> {}, showProgress);
+    }
+
+    private <T> boolean backgroundWithDeadline(String label, boolean network, long deadline, Callable<T> work, Consumer<T> success, Consumer<String> failure) {
+        return backgroundWithDeadline(label, network, deadline, work, success, failure, true);
+    }
+
+    private <T> boolean backgroundWithDeadline(String label, boolean network, long deadline, Callable<T> work, Consumer<T> success, Consumer<String> failure, boolean showProgress) {
+        if (disposed) return false;
+        boolean accepted = runner.submit(network ? SessionRunner.Lane.NETWORK : SessionRunner.Lane.LOCAL_IO, label, deadline, work, value -> {
             if (disposed) return;
             success.accept(value); updateActions();
             drainPendingBean();
@@ -812,9 +837,11 @@ public final class BeaconPanel extends JPanel implements Disposable {
                 connectionProblem = error + " Connection retained; automatic sampling paused. Resume manually when workers become available.";
             }
             failure.accept(error); status(error); updateActions(); drainPendingBean();
-        })) status("A request is already running. Wait for it to finish, or disconnect to stop waiting. Requests are neither queued nor overlapped.");
-        else status(label + "…");
+        });
+        if (!accepted) status("A request is already running. The new request was not submitted. Wait for it to finish, or disconnect to stop waiting. Requests are neither queued nor overlapped.");
+        else if (showProgress) status(label + "…");
         updateActions();
+        return accepted;
     }
 
     /** Only resumes the user's selected MBean read; never retains or retries a failed mutation. */
@@ -828,8 +855,9 @@ public final class BeaconPanel extends JPanel implements Disposable {
         JmxClient active = client; if (active == null) return;
         if (!manual && runner.isBusy()) return;
         background("Sample JVM metrics", true, () -> new SampleResult(active.sample(), renderNotifications(active.notifications())), result -> {
-            showSample(result.sample()); showNotifications(result.notifications()); status("Metrics updated · " + time(result.sample().captureEnd()) + ". Missing values are not treated as zero.");
-        });
+            showSample(result.sample()); showNotifications(result.notifications());
+            if (manual) status("Metrics updated · " + time(result.sample().captureEnd()) + ". Missing values are not treated as zero.");
+        }, manual);
     }
     private record SampleResult(JmxClient.Sample sample, String notifications) {}
 
@@ -935,6 +963,7 @@ public final class BeaconPanel extends JPanel implements Disposable {
             beanHeading.setCaretPosition(0);
             attributeValues = data.attributes(); attributePresentations = data.presentations(); attributeModel.setRowCount(0); operationModel.clear();
             attributeContext = "Target: " + identityLabel() + "\nMBean: " + data.name() + "\nRead window: " + window(data.captureStart(), data.captureEnd()) + " · Sequential attribute reads; not atomic.";
+            operationSelectionGeneration++;
             operationStructure = null; exploreOperation.setEnabled(false); operationResult.setText("");
             for (int i = 0; i < attributeValues.size(); i++) {
                 JmxClient.AttributeValue a = attributeValues.get(i);
@@ -953,6 +982,8 @@ public final class BeaconPanel extends JPanel implements Disposable {
 
     private void clearBeanDetails(String message) {
         inspectedBean = null; pendingBean = null; attributeValues = List.of(); attributePresentations = List.of(); attributeContext = "";
+        invocationPending = false;
+        operationSelectionGeneration++;
         operationStructure = null; operationContext = ""; exploreAttribute.setEnabled(false); exploreOperation.setEnabled(false);
         attributeModel.setRowCount(0); operationModel.clear(); valueDetail.setText(""); operationResult.setText("");
         beanHeading.setText(message);
@@ -984,6 +1015,7 @@ public final class BeaconPanel extends JPanel implements Disposable {
     private boolean writableContext() {
         if (client == null) { status("Connect to a JVM first."); return false; }
         if (observe.isSelected()) { status("Read-only mode is on. To make a change, turn it off in the toolbar and verify the target in each confirmation."); return false; }
+        if (runner.isBusy()) { status("A request is running. Wait for it to finish before reviewing a write or invocation. Nothing was submitted."); return false; }
         if (inspectedBean == null || !Objects.equals(inspectedBean, beans.getSelectedValue())) { status("Wait for the selected MBean to finish loading."); return false; }
         return true;
     }
@@ -997,8 +1029,9 @@ public final class BeaconPanel extends JPanel implements Disposable {
         if (!TypeCodec.supports(attribute.type())) { status("Editing is not supported for type " + attribute.type() + ". Arbitrary objects are not constructed through reflection."); return; }
         JmxClient active = client; String bean = inspectedBean;
         ValueInputDialog input = new ValueInputDialog(project, "Edit attribute · " + attribute.name(), identityLabel() + "\n" + bean + "\nWriting may change application behavior. A timed-out write is never retried automatically.", List.of(attribute.name()), List.of(attribute.type()));
-        if (!input.showAndGet()) return;
+        if (!confirmations.show(input::showAndGet)) return;
         if (client != active || observe.isSelected()) { status("The session or Read-only mode changed. Nothing was written. Verify the target again."); return; }
+        if (runner.isBusy()) { status("Another request is running. Nothing was written. Review and confirm the write again after it finishes."); return; }
         String text = input.values().getFirst();
         background("Write attribute (outcome unknown if timed out)", true, () -> { active.setAttribute(bean, attribute.name(), attribute.type(), text); return true; }, ignored -> {
             status("Attribute write returned successfully. Reading back the current value…"); loadBean();
@@ -1016,34 +1049,48 @@ public final class BeaconPanel extends JPanel implements Disposable {
         }
         JmxClient active = client; String bean = inspectedBean;
         ValueInputDialog input = new ValueInputDialog(project, "Invoke operation · " + op.getName(), identityLabel() + "\n" + bean + "\n" + operationSignature(op) + "\n" + op.getDescription() + "\nInvocation may modify, block or restart the target. A parameterless operation is not necessarily safe. Timed-out invocations are never retried automatically.", names, types);
-        if (!input.showAndGet()) return;
+        if (!confirmations.show(input::showAndGet)) return;
         if (client != active || observe.isSelected()) { status("The session or Read-only mode changed. The operation was not invoked. Verify the target again."); return; }
+        if (runner.isBusy()) { status("Another request is running. The operation was not invoked. Review and confirm it again after the request finishes."); return; }
         List<String> inputs = input.values();
         String invocationTarget = identityLabel();
-        operationStructure = null; exploreOperation.setEnabled(false);
-        operationResult.setText("Invocation pending. If waiting times out, its outcome is unknown; do not automatically repeat it.");
-        background("Invoke " + op.getName() + " (outcome unknown if timed out)", true, () -> {
+        long expectedSelection = ++operationSelectionGeneration;
+        boolean accepted = backgroundWithDeadline("Invoke " + op.getName() + " (outcome unknown if timed out)", true, 8_000, () -> {
             long captureStart = System.currentTimeMillis();
             Object value = active.invoke(bean, op, inputs);
             long captureEnd = System.currentTimeMillis();
             return new OperationResult(ValueFormatter.format(value), StructuredValue.capture("Return value", value), captureStart, captureEnd);
         }, result -> {
-            if (!Objects.equals(inspectedBean, bean) || operations.getSelectedValue() != op) {
+            invocationPending = false;
+            if (expectedSelection != operationSelectionGeneration || !Objects.equals(inspectedBean, bean) || operations.getSelectedValue() != op) {
                 status("The operation returned, but the selected operation changed. Its result was discarded; it will not be retried."); return;
             }
             operationContext = "Target: " + invocationTarget + "\nMBean: " + bean + "\n" + operationSignature(op) + "\nInvocation window: " + window(result.captureStart(), result.captureEnd());
             operationStructure = result.structure(); exploreOperation.setEnabled(operationStructure != null);
             operationResult.setText(operationContext + "\n" + result.value());
             operationResult.setCaretPosition(0); status("The operation returned. Its result is shown below; the invocation will not be retried automatically.");
+        }, error -> {
+            invocationPending = false;
+            if (expectedSelection != operationSelectionGeneration || !Objects.equals(inspectedBean, bean) || operations.getSelectedValue() != op) return;
+            operationResult.setText(error.contains("[CAPACITY]") ? "Invocation was not started.\n" + error
+                    : "Invocation did not return a result.\n" + error
+                        + "\nInspect the target before another invocation; a failed response cannot establish whether it executed.");
+            operationResult.setCaretPosition(0);
         });
+        if (accepted) {
+            invocationPending = true;
+            operationStructure = null; exploreOperation.setEnabled(false);
+            operationResult.setText("Invocation pending. If waiting times out, its outcome is unknown; do not automatically repeat it.");
+        }
     }
     private record OperationResult(String value, StructuredValue structure, long captureStart, long captureEnd) {}
 
     private void subscribe() {
         if (runner.isBusy()) { status("A request is running. Wait for it to finish before subscribing."); return; }
         JmxClient active = client; String name = beans.getSelectedValue(); if (active == null || name == null) { status("Connect and select the MBean to subscribe to."); return; }
-        if (Messages.showOkCancelDialog(project, "Target: " + identityLabel() + "\nMBean: " + name + "\nThis registers a notification listener and may add target and network overhead. Only the latest 200 notifications received from now on are retained. Subscribing to another MBean removes the current subscription.", "Subscribe to JMX notifications", "Subscribe", "Cancel", Messages.getQuestionIcon()) != Messages.OK) return;
+        if (confirmations.show(() -> Messages.showOkCancelDialog(project, "Target: " + identityLabel() + "\nMBean: " + name + "\nThis registers a notification listener and may add target and network overhead. Only the latest 200 notifications received from now on are retained. Subscribing to another MBean removes the current subscription.", "Subscribe to JMX notifications", "Subscribe", "Cancel", Messages.getQuestionIcon())) != Messages.OK) return;
         if (client != active) { status("The session changed. No subscription was added. Verify the target again."); return; }
+        if (runner.isBusy()) { status("Another request is running. No subscription was added. Confirm again after it finishes."); return; }
         String previous = subscribedBean;
         subscription.setText("Switching subscriptions. If this fails, subscription state is uncertain; subscribe again or disconnect.");
         background("Subscribe to MBean notifications", true, () -> { if (previous != null) active.unsubscribe(previous); active.subscribe(name); return true; }, ignored -> {
@@ -1121,9 +1168,9 @@ public final class BeaconPanel extends JPanel implements Disposable {
         if (identity == null || selected.isEmpty()) return;
         if (runner.isBusy()) { status("A request is running. The frozen interval is retained; save when it finishes."); return; }
         SnapshotStore.Snapshot capture = new SnapshotStore.Snapshot(identity, selected.getLast(), null, notes.getText(), selected);
-        var file = FileChooserFactory.getInstance().createSaveFileDialog(new FileSaverDescriptor("Save captured timeline interval",
+        var file = confirmations.show(() -> FileChooserFactory.getInstance().createSaveFileDialog(new FileSaverDescriptor("Save captured timeline interval",
                 "Includes selected metrics, target identity and notes. No threads, credentials or MBean values. Review notes before sharing.", "jvmb"), project)
-                .save((com.intellij.openapi.vfs.VirtualFile) null, "jvm-beacon-interval-" + System.currentTimeMillis() + ".jvmb");
+                .save((com.intellij.openapi.vfs.VirtualFile) null, "jvm-beacon-interval-" + System.currentTimeMillis() + ".jvmb"));
         if (file == null) return;
         Path path = file.getFile().toPath();
         background("Save timeline interval", false, () -> { SnapshotStore.save(path, capture); return path; },
@@ -1133,7 +1180,7 @@ public final class BeaconPanel extends JPanel implements Disposable {
     private void saveSnapshot() {
         if (identity == null || (sample == null && dump == null)) { status("Capture metrics or threads from a connected JVM, or open an existing snapshot first."); return; }
         if (runner.isBusy()) { status("A request is running. You can save the captured snapshot once it finishes."); return; }
-        var file = FileChooserFactory.getInstance().createSaveFileDialog(new FileSaverDescriptor("Save JVM Beacon snapshot", "Includes captured metrics, platform threads and notes. Thread names and stacks are not automatically redacted.", "jvmb"), project).save((com.intellij.openapi.vfs.VirtualFile) null, "jvm-beacon-" + System.currentTimeMillis() + ".jvmb");
+        var file = confirmations.show(() -> FileChooserFactory.getInstance().createSaveFileDialog(new FileSaverDescriptor("Save JVM Beacon snapshot", "Includes captured metrics, platform threads and notes. Thread names and stacks are not automatically redacted.", "jvmb"), project).save((com.intellij.openapi.vfs.VirtualFile) null, "jvm-beacon-" + System.currentTimeMillis() + ".jvmb"));
         if (file == null) return;
         SnapshotStore.Snapshot capture = currentSnapshot(); Path path = file.getFile().toPath();
         background("Save snapshot", false, () -> { SnapshotStore.save(path, capture); return path; }, saved -> status("Snapshot saved: " + saved + ". Only data actually captured is included."));
@@ -1144,38 +1191,39 @@ public final class BeaconPanel extends JPanel implements Disposable {
         if (compare && identity == null) { status("Capture or open a snapshot to use as the comparison baseline."); return; }
         var descriptor = FileChooserDescriptorFactory.createSingleFileDescriptor("jvmb");
         descriptor.setTitle(compare ? "Select a JVM Beacon snapshot to compare" : "Open JVM Beacon snapshot (switches to offline on success)");
-        FileChooser.chooseFile(descriptor, project, null, file -> {
-            Path path = Path.of(file.getPath());
-            if (compare) {
-                SnapshotStore.Snapshot current = currentSnapshot();
-                record Compared(String text, ThreadComparison.Report threads, String labels, SnapshotStore.Snapshot baseline) { }
-                long generation = ++comparisonGeneration;
-                background("Load and compare snapshots", false, () -> {
-                    SnapshotStore.Snapshot before = SnapshotStore.load(path);
-                    String labels = comparisonCaptureLabel("A · Snapshot from file", before) + "\n\n"
-                            + comparisonCaptureLabel("B · Snapshot at file selection", current);
-                    return new Compared(labels + "\n\n" + SnapshotStore.compare(before, current),
-                            ThreadComparison.compare(before.identity(), before.threads(), current.identity(), current.threads()), labels,
-                            new SnapshotStore.Snapshot(before.identity(), null, before.threads(), ""));
-                }, result -> {
-                    if (generation != comparisonGeneration) return;
-                    threadBaseline = result.baseline().threads() == null ? null : result.baseline();
-                    baselineLabel.setText(threadBaseline == null ? "File A has no threads; pin a captured baseline to compare again" : "A from file · " + window(threadBaseline.threads().captureStart(), threadBaseline.threads().captureEnd()));
-                    comparisonText.setText("Fixed comparison; later samples will not overwrite these results.\nOrder: A is the selected file; B is the snapshot at file selection.\nFile: " + path + "\n\n" + result.text());
-                    threadComparison.showReport(result.threads(), result.labels());
-                    comparisonText.setCaretPosition(0); snapshotViews.setSelectedIndex(1); pages.setSelectedIndex(3);
-                    status("Results are retained in Comparison and Threads → Compare. Different windows or targets cannot be assumed to represent deltas from the same process.");
-                });
-            } else background("Load snapshot", false, () -> SnapshotStore.load(path), loaded -> {
-                releaseSession(); offline = true; identity = loaded.identity(); history.clear(); timeline.reset(); trendMetric.removeAllItems();
-                if (!loaded.history().isEmpty()) history.addAll(loaded.history().subList(0, loaded.history().size() - 1));
-                connectionProblem = null; identityNotice = null; lastTarget = null;
-                hotThreads.clear();
-                resetThreadComparison();
-                watchTarget = null; watchSeries.clear(); renderWatch();
-                clearBeans(); notes.setText(loaded.notes()); showSample(loaded.sample()); showThreads(loaded.threads());
-                updateActions(); snapshotViews.setSelectedIndex(0); pages.setSelectedIndex(loaded.history().size() > 1 ? 4 : 3); status("Offline snapshot opened; the live connection is closed. Data absent from the file cannot be recovered.");
+        var file = confirmations.show(() -> FileChooser.chooseFile(descriptor, project, null));
+        if (file == null) return;
+        if (runner.isBusy()) { status("Another request is running. The snapshot was not opened or compared. Select the file again after it finishes."); return; }
+        Path path = Path.of(file.getPath());
+        if (compare) {
+            SnapshotStore.Snapshot current = currentSnapshot();
+            record Compared(String text, ThreadComparison.Report threads, String labels, SnapshotStore.Snapshot baseline) { }
+            long generation = ++comparisonGeneration;
+            background("Load and compare snapshots", false, () -> {
+                SnapshotStore.Snapshot before = SnapshotStore.load(path);
+                String labels = comparisonCaptureLabel("A · Snapshot from file", before) + "\n\n"
+                        + comparisonCaptureLabel("B · Snapshot at file selection", current);
+                return new Compared(labels + "\n\n" + SnapshotStore.compare(before, current),
+                        ThreadComparison.compare(before.identity(), before.threads(), current.identity(), current.threads()), labels,
+                        new SnapshotStore.Snapshot(before.identity(), null, before.threads(), ""));
+            }, result -> {
+                if (generation != comparisonGeneration) return;
+                threadBaseline = result.baseline().threads() == null ? null : result.baseline();
+                baselineLabel.setText(threadBaseline == null ? "File A has no threads; pin a captured baseline to compare again" : "A from file · " + window(threadBaseline.threads().captureStart(), threadBaseline.threads().captureEnd()));
+                comparisonText.setText("Fixed comparison; later samples will not overwrite these results.\nOrder: A is the selected file; B is the snapshot at file selection.\nFile: " + path + "\n\n" + result.text());
+                threadComparison.showReport(result.threads(), result.labels());
+                comparisonText.setCaretPosition(0); snapshotViews.setSelectedIndex(1); pages.setSelectedIndex(3);
+                status("Results are retained in Comparison and Threads → Compare. Different windows or targets cannot be assumed to represent deltas from the same process.");
             });
+        } else background("Load snapshot", false, () -> SnapshotStore.load(path), loaded -> {
+            releaseSession(); offline = true; identity = loaded.identity(); history.clear(); timeline.reset(); trendMetric.removeAllItems();
+            if (!loaded.history().isEmpty()) history.addAll(loaded.history().subList(0, loaded.history().size() - 1));
+            connectionProblem = null; identityNotice = null; lastTarget = null;
+            hotThreads.clear();
+            resetThreadComparison();
+            watchTarget = null; watchSeries.clear(); renderWatch();
+            clearBeans(); notes.setText(loaded.notes()); showSample(loaded.sample()); showThreads(loaded.threads());
+            updateActions(); snapshotViews.setSelectedIndex(0); pages.setSelectedIndex(loaded.history().size() > 1 ? 4 : 3); status("Offline snapshot opened; the live connection is closed. Data absent from the file cannot be recovered.");
         });
     }
 

@@ -13,6 +13,22 @@ import java.util.function.Consumer;
 import static org.junit.jupiter.api.Assertions.*;
 
 class JfrStacksPanelTest {
+    @Test void newRecordingClearsHighlightWhileRangeChangesKeepIt() throws Exception {
+        var data = new JfrStacks.Data(List.of(), Map.of(), false);
+        var view = JfrStacks.aggregate(data, JfrStacks.Kind.JAVA, null);
+        SwingUtilities.invokeAndWait(() -> {
+            JfrPanel.Jobs jobs = new JfrPanel.Jobs() {
+                public <T> void run(String label, boolean network, long deadline, Callable<T> work, Consumer<T> success, Consumer<String> failure) {
+                    fail("Loading copied data and highlighting must not submit work");
+                }
+            };
+            var panel = new JfrStacksPanel(jobs, f -> fail("No implicit source navigation"), s -> { }); panel.load(data, view);
+            var highlight = all(panel).stream().filter(JTextField.class::isInstance).map(JTextField.class::cast).findFirst().orElseThrow();
+            highlight.setText("previous.recording.Work"); panel.loadScoped(data, view);
+            assertEquals("previous.recording.Work", highlight.getText());
+            panel.load(data, view); assertEquals("", highlight.getText());
+        });
+    }
     @Test void zoomAndResetStartAtTheNewRootInsteadOfKeepingAnOldScrollOffset() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             var child = new JfrStacks.Node(null, "child", 1, 1, List.of());

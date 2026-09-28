@@ -1,10 +1,10 @@
 # 手动测试指南
 
-适用开发版本：0.14.0。建议环境：Windows、IDEA 2025.1.3、完整 JDK 21。这里只说明**怎么测试**；实际通过/失败/未测范围见 [validation.md](validation.md) 和 [gui-validation.md](gui-validation.md)。不要在未知业务进程上验证写入、方法、压力或退出。
+适用开发版本：0.14.1。建议环境：Windows、IDEA 2025.1.3、完整 JDK 21。这里只说明**怎么测试**；实际通过/失败/未测范围见 [validation.md](validation.md) 和 [gui-validation.md](gui-validation.md)。不要在未知业务进程上验证写入、方法、压力或退出。
 
 ## 准备：约 2 分钟
 
-1. 按 [README 安装步骤](../README.md#安装与开始) 安装 `build/distributions/jvm-beacon-0.14.0.zip`，重启 IDE；在 Plugins 中确认显示 0.14.0。
+1. 按 [README 安装步骤](../README.md#安装与开始) 安装 `build/distributions/jvm-beacon-0.14.1.zip`，重启 IDE；在 Plugins 中确认显示 0.14.1。
 2. 打开 **View → Tool Windows → JVM Beacon**。工具窗口太矮时向上拖顶部边缘；结果区的细分隔线也可以调整。插件自有界面应为英文。
 3. 在 PowerShell 运行以下命令，替换路径。这个终端要保持运行，看到 `PID=…` 和 `READY` 才开始连接。
 
@@ -15,6 +15,17 @@ $env:JAVA_HOME = 'C:\Users\lenovo\.jdks\corretto-21.0.9'
 ```
 
 默认模式在终端输入 `quit` 后按 Enter 正常结束；空行被忽略。若使用 `-DurationSeconds 600`，会在 10 分钟后结束，Enter 不控制退出。每次启动是独立 JVM，Counter 重新从 7 开始。该脚本没有远程监听端口；它用于 Local JVM 测试。
+
+## 0.14.1 审查修复快速复测
+
+仅使用上面的自有 fixture。以下是可重复步骤，实际已执行范围另见本轮验证记录。
+
+1. 连接后开启 **Auto · 2 s**，搜索 `dev.jvmbeacon.demo` 并打开 Probe；取消顶部 Read-only，选 `add(int, int)`。在 Invoke 确认框停留至少 5 秒，输入 2 和 3 后 Execute once，应返回 5；确认期间不启动新的自动请求，退出后恢复采样。
+2. 选 `fail()` → Invoke → Execute once。结果区应结束 pending，显示 TARGET 失败；连接继续 LIVE，后续采样不能抹掉此操作提示。不要把失败响应理解为目标绝对没有执行任何代码。
+3. 打开 Read-only 再尝试 Invoke，应显示观察模式说明；等待几个采样周期，说明仍可见。取消 Replace JVM 的连接框后，自动采样仍按原设置继续。
+4. Probe 的 `IoFailureNumber`、`TlsFailureNumber`、`ErrorFailureNumber` 是故意抛错的 getter。读取或 Watch 失败应说明 TARGET；健康连接应保留，普通指标仍可采样。Watch 失败暂停，不自动重复调用。
+5. Auto 开启时进入 Flight Recorder，Check / refresh 后 Record 确认框停留 5 秒；只在确认目标、时限后启动自有录制。取消对话框不启动录制，也不改变原 Auto 设置。下载用新的文件名；本地路径不可写属于 FILE，不能当目标断连。真实网络故障仍可能断连。
+6. 保存带备注现场，再新建标签重开；目标身份、历史与线程范围应明确。无有效身份、倒退/重叠时窗、计数回退等合成边界由自动测试验证，不能靠修改未知业务现场模拟。
 
 ## 连接工作区与显式重连（0.8.0）
 

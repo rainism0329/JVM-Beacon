@@ -21,6 +21,51 @@ import static org.junit.jupiter.api.Assertions.*;
 class JfrIntegrationTest {
     @TempDir Path directory;
 
+    @Test void localWriteAndCloseFailuresKeepRecordingAndRemoteReadFailureKeepsItsOrigin() throws Exception {
+        try (FixtureProcess fixture = new FixtureProcess(true);
+             var connector = JMXConnectorFactory.connect(new JMXServiceURL(fixture.url),
+                     Map.of("jmx.remote.credentials", new String[]{"operator", fixture.password}))) {
+            var delegate = connector.getMBeanServerConnection(); var mode = new AtomicReference<String>();
+            var streamCloses = new AtomicInteger();
+            var intercepted = (MBeanServerConnection) Proxy.newProxyInstance(getClass().getClassLoader(),
+                    new Class<?>[]{MBeanServerConnection.class}, (proxy, method, args) -> {
+                        if (method.getName().equals("invoke")) {
+                            if ("readStream".equals(args[1]) && "remote-read".equals(mode.get())) throw new java.io.IOException("Simulated transport read failure");
+                            if ("closeStream".equals(args[1])) streamCloses.incrementAndGet();
+                        }
+                        try { return method.invoke(delegate, args); }
+                        catch (InvocationTargetException e) { throw e.getCause(); }
+                    });
+            for (String fault : java.util.List.of("local-write", "local-close", "remote-read")) {
+                mode.set(fault); streamCloses.set(0);
+                try (var capture = new JfrCapture(intercepted, path -> new java.io.FilterOutputStream(Files.newOutputStream(path)) {
+                    @Override public void write(byte[] bytes, int offset, int length) throws java.io.IOException {
+                        if ("local-write".equals(mode.get())) {
+                            out.write(bytes, offset, Math.min(8, length));
+                            throw new java.io.IOException("Simulated local disk write failure");
+                        }
+                        out.write(bytes, offset, length);
+                    }
+                    @Override public void close() throws java.io.IOException {
+                        out.close();
+                        if ("local-close".equals(mode.get())) throw new java.io.IOException("Simulated local close failure");
+                    }
+                })) {
+                    long id = capture.start("default", 30).id(); capture.stop();
+                    Path target = directory.resolve(fault + ".jfr");
+                    var failure = assertThrows(java.io.IOException.class, () -> capture.download(target));
+                    assertEquals(!fault.equals("remote-read"), failure instanceof JfrCapture.LocalFileException, "Only local file operations receive a local-origin marker");
+                    assertEquals(1, streamCloses.get()); assertFalse(Files.exists(target));
+                    try (var files = Files.list(directory)) { assertEquals(0, files.count(), "Owned partial file must be removed after a bounded failure"); }
+                    assertEquals(id, capture.inspect().id()); assertEquals("STOPPED", capture.inspect().state());
+                    mode.set("normal"); assertEquals(target, capture.download(target));
+                    assertTrue(Files.size(target) > 0); assertEquals(id, capture.inspect().id());
+                    Files.delete(target); assertEquals(0, capture.release().id());
+                }
+            }
+        }
+    }
+
     @Test void actualRemoteProfileFindsOwnedCpuPulseAndThread() throws Exception {
         try (FixtureProcess fixture = new FixtureProcess(true, Map.of(), java.util.List.of("--cpu-demo")); JmxClient client = fixture.remote("operator")) {
             client.jfr().start("profile", 8);

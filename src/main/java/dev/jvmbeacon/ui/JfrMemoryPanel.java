@@ -10,7 +10,7 @@ import dev.jvmbeacon.core.JfrMemory;
 import javax.swing.*;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
-import javax.swing.table.DefaultTableModel;
+import javax.swing.table.AbstractTableModel;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.TableRowSorter;
 import java.awt.*;
@@ -30,12 +30,12 @@ import java.util.function.BiConsumer;
 final class JfrMemoryPanel extends JPanel {
     private final JLabel summary = BeaconUi.label("Open a local .jfr to inspect GC and allocation evidence", true);
     private final JBTextField search = new JBTextField();
-    private final DefaultTableModel gcModel = model(new String[]{"Kind", "GC ID", "Start (UTC)", "Duration · ms", "Name", "Cause"},
+    private final Rows gcModel = new Rows(new String[]{"Kind", "GC ID", "Start (UTC)", "Duration · ms", "Name", "Cause"},
             new Class<?>[]{String.class, Long.class, String.class, Double.class, String.class, String.class});
-    private final DefaultTableModel allocationModel = model(new String[]{"Allocated class", "Class ID", "Samples", "Weight · bytes", "Weight share · %"},
+    private final Rows allocationModel = new Rows(new String[]{"Allocated class", "Class ID", "Samples", "Weight · bytes", "Weight share · %"},
             new Class<?>[]{String.class, Long.class, Long.class, BigInteger.class, Double.class});
     private final JBTable gcTable = new JBTable(gcModel), allocationTable = new JBTable(allocationModel);
-    private final TableRowSorter<DefaultTableModel> gcSorter = new TableRowSorter<>(gcModel), allocationSorter = new TableRowSorter<>(allocationModel);
+    private final TableRowSorter<Rows> gcSorter = new TableRowSorter<>(gcModel), allocationSorter = new TableRowSorter<>(allocationModel);
     private final JTextArea detail = BeaconUi.text("Select an event or class to read exact evidence.", 2);
     private final JTextArea coverage = BeaconUi.text("No local recording inspected.", 12);
     private final JButton copy = new JButton("Copy selected evidence"), copyCoverage = new JButton("Copy coverage");
@@ -100,15 +100,16 @@ final class JfrMemoryPanel extends JPanel {
         copy.setEnabled(false); copyCoverage.setEnabled(false);
     }
     void clear() {
-        data = null; gcModel.setRowCount(0); allocationModel.setRowCount(0); search.setText("");
+        data = null; gcModel.replace(List.of()); allocationModel.replace(List.of()); search.setText("");
         timeline.show(null, List.of()); coverage.setText("No local recording inspected.");
         summary.setText("Open a local .jfr to inspect GC and allocation evidence"); copyCoverage.setEnabled(false); showSelection();
     }
     void load(JfrMemory.Data next) {
         clear(); data = next;
-        for (var event : next.gc()) gcModel.addRow(new Object[]{event.kind().name(), event.id(), event.start().toString(), event.nanos() / 1_000_000.0, event.name(), event.cause()});
-        for (var entry : next.allocations()) allocationModel.addRow(new Object[]{entry.className(), entry.classId(), entry.samples(), entry.weight(),
-                next.totalWeight().signum() == 0 ? null : entry.weight().doubleValue() / next.totalWeight().doubleValue() * 100.0});
+        gcModel.replace(next.gc().stream().map(event -> new Object[]{event.kind().name(), event.id(), event.start().toString(),
+                event.nanos() / 1_000_000.0, event.name(), event.cause()}).toList());
+        allocationModel.replace(next.allocations().stream().map(entry -> new Object[]{entry.className(), entry.classId(), entry.samples(), entry.weight(),
+                next.totalWeight().signum() == 0 ? null : entry.weight().doubleValue() / next.totalWeight().doubleValue() * 100.0}).toList());
         allocationSorter.setSortKeys(List.of(new RowSorter.SortKey(3, SortOrder.DESCENDING)));
         coverage.setText(next.text()); coverage.setCaretPosition(0); copyCoverage.setEnabled(true);
         summary.setText(next.gc().size() + " GC events · " + next.allocations().size() + " allocation classes · "
@@ -119,7 +120,7 @@ final class JfrMemoryPanel extends JPanel {
     void setBusy(boolean busy) { this.busy = busy; focus.setEnabled(!busy && selectedGc != null); }
     private void filter() {
         String text = search.getText().strip();
-        RowFilter<DefaultTableModel, Integer> filter = text.isEmpty() ? null : RowFilter.regexFilter("(?i)" + java.util.regex.Pattern.quote(text));
+        RowFilter<Rows, Integer> filter = text.isEmpty() ? null : RowFilter.regexFilter("(?i)" + java.util.regex.Pattern.quote(text));
         gcSorter.setRowFilter(filter); allocationSorter.setRowFilter(filter);
         List<JfrMemory.Gc> visible = new ArrayList<>();
         if (data != null) for (int i = 0; i < gcTable.getRowCount(); i++) visible.add(data.gc().get(gcTable.convertRowIndexToModel(i)));
@@ -154,10 +155,13 @@ final class JfrMemoryPanel extends JPanel {
     }
     private static String missing(Object value) { return value == null ? "Not reported / unsupported" : value.toString(); }
     private static String nanos(Long value) { return value == null ? missing(null) : value + " ns"; }
-    private static DefaultTableModel model(String[] columns, Class<?>[] types) {
-        return new DefaultTableModel(columns, 0) {
-            public boolean isCellEditable(int r, int c) { return false; } public Class<?> getColumnClass(int c) { return types[c]; }
-        };
+    private static final class Rows extends AbstractTableModel {
+        private final String[] columns; private final Class<?>[] types; private List<Object[]> rows = List.of();
+        Rows(String[] columns, Class<?>[] types) { this.columns = columns; this.types = types; }
+        void replace(List<Object[]> next) { rows = List.copyOf(next); fireTableDataChanged(); }
+        public int getRowCount() { return rows.size(); } public int getColumnCount() { return columns.length; }
+        public String getColumnName(int c) { return columns[c]; } public Class<?> getColumnClass(int c) { return types[c]; }
+        public Object getValueAt(int r, int c) { return rows.get(r)[c]; }
     }
 
     private static final class GcTimeline extends JComponent {

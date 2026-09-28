@@ -92,7 +92,7 @@ final class JfrStacksPanel extends JPanel {
         populateThreads(); updateActions();
     }
     void load(JfrStacks.Data next, JfrStacks.View initial) {
-        generation++; data = next; kind.setSelectedItem(JfrStacks.Kind.JAVA); populateThreads(); show(initial);
+        generation++; data = next; highlight.setText(""); kind.setSelectedItem(JfrStacks.Kind.JAVA); populateThreads(); show(initial);
     }
     JfrStacks.Kind activeKind() { return view == null ? JfrStacks.Kind.JAVA : view.kind(); }
     JfrStacks.SampledThread activeThread() { return view == null ? null : view.thread(); }

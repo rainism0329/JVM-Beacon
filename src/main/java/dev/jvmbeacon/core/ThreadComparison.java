@@ -46,9 +46,10 @@ public final class ThreadComparison {
 
     public static Report compare(Identity beforeIdentity, ThreadDump before, Identity afterIdentity, ThreadDump after) {
         Window first = window(before), second = window(after);
-        if (!usable(beforeIdentity) || !usable(afterIdentity))
+        ConnectionIdentity.Match identityMatch = ConnectionIdentity.compare(beforeIdentity, afterIdentity);
+        if (identityMatch == ConnectionIdentity.Match.FIRST || identityMatch == ConnectionIdentity.Match.INCOMPLETE)
             return unavailable(Status.MISSING_IDENTITY, "Target identity is missing or incomplete; thread IDs cannot be compared.", first, second);
-        if (!beforeIdentity.equals(afterIdentity)) {
+        if (identityMatch == ConnectionIdentity.Match.CHANGED) {
             boolean sameRuntime = beforeIdentity.runtimeName().equals(afterIdentity.runtimeName());
             return unavailable(Status.DIFFERENT_JVM, sameRuntime
                     ? "Runtime labels match, but start times or VM details differ. A restart or PID reuse is possible; thread IDs cannot be compared."
@@ -142,10 +143,6 @@ public final class ThreadComparison {
         return new Report(status, explanation, before, after, null, List.of(), false,
                 before != null && before.truncated() || after != null && after.truncated(), false, false);
     }
-    private static boolean usable(Identity identity) {
-        return identity != null && identity.startTime() > 0 && nonempty(identity.runtimeName()) && nonempty(identity.vmName()) && nonempty(identity.vmVersion());
-    }
-    private static boolean nonempty(String value) { return value != null && !value.isBlank(); }
     private static boolean validWindow(ThreadDump dump) { return dump.captureStart() >= 0 && dump.captureEnd() >= dump.captureStart(); }
     private static Window window(ThreadDump dump) {
         return dump == null ? null : new Window(dump.captureStart(), dump.captureEnd(), Math.min(JmxClient.MAX_THREADS, dump.threads().size()), dump.truncated() || dump.threads().size() > JmxClient.MAX_THREADS);

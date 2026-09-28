@@ -1,6 +1,6 @@
 # JVM Beacon
 
-IDEA 原生 JMX 诊断插件；当前开发版本 0.14.0（2026-09-28）。用户已授权创建并推送到现有账号 rainism0329 的私有 GitHub 仓库 JVM-Beacon；不公开仓库、不发布 Marketplace 或 GitHub Release。
+IDEA 原生 JMX 诊断插件；当前开发版本 0.14.1（2026-09-28）。用户已授权创建并推送到现有账号 rainism0329 的私有 GitHub 仓库 JVM-Beacon；不公开仓库、不发布 Marketplace 或 GitHub Release。
 
 - Java 21、IntelliJ Platform Gradle Plugin 2.x、Swing；纯 JDK 核心放在 `dev.jvmbeacon.core`，IDE 适配/UI 放在 `dev.jvmbeacon.ui`。
 - UI 复用 `BeaconUi`：OnePixelSplitter、动态主题色、DPI 间距和字体随主题更新；不恢复标准 Swing 粗分隔或固定亮色背景。
@@ -17,6 +17,7 @@ IDEA 原生 JMX 诊断插件；当前开发版本 0.14.0（2026-09-28）。用�
 - 网络池 4 线程、本地 I/O 池 2 线程，分别无队列；16 个连接许可覆盖连接中、活动及清理中，关闭入队前去重、结束后归还，释放插件时不得丢弃已排队清理。
 - 连接使用原生 Content 标签，每项目最多 8 页；每页独立 BeaconPanel/SessionRunner，关闭由 Content disposer 清理。只对可见页自动轮询，隐藏页保留有界通知；收藏修改先读应用最新集合，避免跨页覆盖。不能在项目/内容管理器释放时重建空页。测试步骤集中在 `docs/testing.md`，README 保留入口与快速流程。
 - 默认观察模式；属性写入和操作要明确确认，超时后不能自动重试。凭据只进 PasswordSafe，不进日志/导出/项目配置。
+- 确认对话框的嵌套 EDT 循环期间暂停自动请求；仅请求准入后显示 pending，失败/取消必须结束 pending。正常自动采样不能覆盖用户操作反馈。
 - ConnectionWorkspace 仅保存 40 个远程配置元数据到应用本机非漫游设置，最近成功最多 10 个；不存密码/本地 PID。删除或端点修改胜过迟到成功，跨页改名不覆盖其他配置。显式重连清采集历史、恢复只读/暂停采样、不沿用 agent-start 许可；密码后台读取，迟到秘密须清除。身份比较只表示报告值相同/变化/不完整，不保证目标认证。
 - 错误分类先识别 MBean 异常包装；目标代码抛出的参数/权限/I/O 异常不能误报成客户端校验失败或连接失效。
 - 所有采集和显示必须标明时窗、来源、缺失/截断/能力边界；ThreadMXBean 只表示平台线程。

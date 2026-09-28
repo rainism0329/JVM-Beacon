@@ -17,14 +17,14 @@ final class JfrRangeBar extends JPanel {
     private final Consumer<JfrTimeRange> apply;
     private JfrSummary.Report report;
     private boolean busy;
-    JfrRangeBar(JButton open, JToggleButton capture, Consumer<JfrTimeRange> apply) {
+    JfrRangeBar(JButton open, JToggleButton capture, Consumer<JfrTimeRange> apply, ConfirmationGate confirmations) {
         super(new BorderLayout(JBUI.scale(8), 0)); this.apply = apply;
         add(BeaconUi.row(open, edit, full, label, capture), BorderLayout.NORTH);
         label.putClientProperty("beacon.mono", true);
         edit.addActionListener(e -> {
             if (report == null || busy || report.first() == null) return;
             var dialog = new RangeDialog(report);
-            if (dialog.showAndGet()) apply.accept(dialog.value());
+            if (confirmations.show(dialog::showAndGet)) apply.accept(dialog.value());
         });
         full.addActionListener(e -> { if (!busy && report != null && report.range() != null) apply.accept(null); });
         edit.setToolTipText("Rescan this local file and apply one time range to every JFR analysis view.");

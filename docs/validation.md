@@ -1,8 +1,31 @@
-# 0.14.0 验证与接续状态
+# 0.14.1 验证与接续状态
 
 日期：2026-09-28，Windows 11 x64。这是**功能开发预览**，完成了下列具体场景，尚未完成全部验收或整个产品愿景。历史记录按版本保留，不由旧构建外推新包通过。
 
-## 0.14.0 当前验证
+## 0.14.1 当前验证：现有功能审查修复
+
+修复详情与未解决项见 [本轮审查](audit-2026-09-28.md)。重点是目标异常分类、模态确认/文件选择期间自动请求竞争、操作结果 pending 与选择失效、现场身份/时窗/计数比较、复杂表格截断、本地 JFR 文件失败来源；未增加新分析菜单。README 与测试指南已更正过时能力描述。
+
+最终 [jvm-beacon-0.14.1.zip](../build/distributions/jvm-beacon-0.14.1.zip)：**2026-09-28 17:21:59 +08:00，468,808 bytes**；SHA-256 `56c304ad018ad9b2039d2a0a77bdb887a9d3f2821c37c2d1a7a3014827efba3d`。包内与沙箱加载 JAR 均为 `9bae9d00ac3287aa9dbe4fe89075fa5c107ce2dcad100963f6d7063fa5b0f9a0`。[核对记录](../build/reports/release-checks-0.14.1.json)。未发布 Release/Marketplace。
+
+| 检查 | 实际结果与边界 |
+|---|---|
+| 最终构建 | `test buildPlugin verifyPlugin` exit 0，**151 项、0 失败/错误/跳过**，较 0.14.0 新增 18 项。[日志](../build/reports/checks-0.14.1.txt) |
+| 核心/真实 JVM 回归 | getter 安全/I/O/TLS/RuntimeErrorException，健康读取保留；JFR 本地写入/关闭与远程流错误区分、临时文件和流清理、录制可再下载；精确快照比较、缺失身份/占位符、回退计数/异常时窗；属性倒退时钟缺口。既有认证/TLS/权限/断连、线程/锁、通知、类型与 JFR 事件用例全量重跑 |
+| UI 组件回归 | Swing Timer + SecondaryLoop 确认期间暂停/取消恢复/嵌套异常；JFR 共用门控与文件选择后 busy 不提交、不自动重试；复杂字段错列；最大 4096/2048 行整批更新和排序详情；换文件清高亮 |
+| 兼容性 | Verifier 1.408 对 IC/IU **251.26927.53 均 Compatible**。保留既有 SslRMIClientSocketFactory 的 JDK 8 规则 deprecated 提示及 IDE layout WARN；真实 JDK 21 TLS 回归通过 |
+| 最终 IDE | 官方 IC 2025.1.3 / JBR 21 / Windows：**17:23:02.606** 加载 0.14.1，**17:30:49.364** 正常退出，runIde exit 0，当前会话 ERROR **0**。[日志](../build/reports/ide-load-0.14.1.txt) |
+| 最终 GUI | 1388×974 / 125% / Light：本地连接、Auto 趋势、只读提示跨采样保留、确认停留 5 秒后 fail() → TARGET / LIVE / 非 pending；平台线程、保存备注现场、新标签重开、活动/离线页并存、关闭活动页；30 秒 JFR 启动/自动停止/下载/解析。[截图](gui-validation.md) |
+| 实际文件与清理 | GUI `.jvmb` **218,085 bytes / 82 样本 / 16 平台线程**；`.jfr` **339,500 bytes / 4,721 events / EOF**。关闭连接标签后对自有 PID 26012 执行 JDK `jcmd JFR.check`，返回 `No available recordings.`；不读取未知进程 |
+| 资源观察 | 独立认证 loopback，180.001 秒、90 次采样、18 次线程与 save/load；p95 83.462 ms，采集进程平均单核 CPU 1.17187%；自有目标和 executor 均结束。[方法与原始数据](soak-validation.md)。不是整个 IDEA 的性能结论 |
+
+首轮 148 项测试/构建/Verifier 通过后，复核又补齐 JFR 门控与线程身份占位符；上表为全部修复后的 151 项最终重跑，不使用首轮包替代。准备 GUI fixture 时曾传入 1200 秒被脚本 600 秒上限拒绝，未启动 JVM；随后按 600 秒运行。基线审查的首次受限终端 fixture 编译因资源关闭错误失败，使用允许的独立进程后成功；均未记为插件测试通过。
+
+未验证：IU GUI、最终包 Dark/多缩放/完整键盘和屏幕阅读器、最大 JFR/8 标签/整体 IDEA 长时开销、真实 WAN/容器/更多 JDK/OS；A→B→A 调用选择失效做代码复核，未在最终 GUI 单独演练。故障注入的本地 JFR 写失败与长字段 Rows 属自动回归，未声称 GUI 全矩阵通过。
+
+下一步：优先拆分 MBean 元数据与 getter 读取并改善详情布局，再做 Run/Debug 精确目标关联；凭据任务清理、资源/兼容专项同步安排。诊断工作空间、Pinned、分配栈仍未实现。
+
+## 0.14.0 历史验证
 
 交付本地 JFR **统一时间区间**：库存、采样栈/火焰图、GC/分配、等待分析同时重算；GC 和等待事件可聚焦前后最多 100 ms。持续事件保留完整时长，区间重叠不是因果证据。失败保留已应用范围与旧结果，显示 Update failed；产品界面英文。
 

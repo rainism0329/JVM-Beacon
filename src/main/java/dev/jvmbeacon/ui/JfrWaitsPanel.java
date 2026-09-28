@@ -27,6 +27,7 @@ final class JfrWaitsPanel extends JPanel {
     private final Consumer<JfrStacks.Frame> navigate;
     private final Consumer<String> status;
     private final BiConsumer<Instant, Instant> focusEvent;
+    private final ConfirmationGate confirmations;
     private JfrWaits.Kind activeKind;
     private String activeQuery = "";
     private final JComboBox<Object> kind = new JComboBox<>(new Object[]{"All event kinds", JfrWaits.Kind.ENTER, JfrWaits.Kind.WAIT, JfrWaits.Kind.PARK});
@@ -48,7 +49,11 @@ final class JfrWaitsPanel extends JPanel {
         this(jobs, navigate, status, (start, end) -> { });
     }
     JfrWaitsPanel(JfrPanel.Jobs jobs, Consumer<JfrStacks.Frame> navigate, Consumer<String> status, BiConsumer<Instant, Instant> focusEvent) {
+        this(jobs, navigate, status, focusEvent, new ConfirmationGate());
+    }
+    JfrWaitsPanel(JfrPanel.Jobs jobs, Consumer<JfrStacks.Frame> navigate, Consumer<String> status, BiConsumer<Instant, Instant> focusEvent, ConfirmationGate confirmations) {
         super(new BorderLayout(JBUI.scale(6), JBUI.scale(6))); this.jobs = jobs; this.navigate = navigate; this.status = status; this.focusEvent = focusEvent;
+        this.confirmations = confirmations;
         kind.setRenderer(new DefaultListCellRenderer() { { putClientProperty("html.disable", true); } });
         kind.getAccessibleContext().setAccessibleName("Wait event kind filter");
         search.setPreferredSize(JBUI.size(280, 28)); search.getEmptyText().setText("Thread / class / recorded method…");
@@ -140,7 +145,14 @@ final class JfrWaitsPanel extends JPanel {
     private void inspect() {
         var event = selectedEvent(); if (event == null) return;
         long expected = generation;
-        new EventDialog(event, navigate, view.text(), (start, end) -> { if (generation == expected && !busy) focusEvent.accept(start, end); }).show();
+        confirmations.show(() -> {
+            new EventDialog(event, navigate, view.text(), (start, end) -> {
+                if (generation != expected) status.accept("The recording changed. Select the event again before focusing it.");
+                else if (busy) status.accept("Event focus was not applied because another request is running. Try again after it finishes.");
+                else focusEvent.accept(start, end);
+            }).show();
+            return null;
+        });
     }
     private static BigDecimal ms(BigInteger nanos) { return new BigDecimal(nanos, 6); }
     private static void columnWidths(JBTable table, int... widths) {

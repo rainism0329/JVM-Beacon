@@ -43,6 +43,42 @@ class JfrMemoryPanelTest {
             assertTrue(components.stream().filter(JTextArea.class::isInstance).map(JTextArea.class::cast).anyMatch(t -> t.getText().contains("sumOfPauses: Not reported / unsupported · longestPause: 0 ns")));
         });
     }
+    @Test void maximumRetainedTablesReplaceInBatchesAndKeepSortedEvidenceAndScopeSearch() throws Exception {
+        var time = Instant.parse("2026-09-28T00:00:00Z");
+        var gc = new ArrayList<JfrMemory.Gc>(); var allocations = new ArrayList<JfrMemory.Allocation>();
+        BigInteger weight = BigInteger.ZERO;
+        for (int i = 0; i < JfrMemory.GC_LIMIT; i++) gc.add(new JfrMemory.Gc(JfrMemory.Kind.CYCLE, i, time,
+                time.plusNanos(i + 1), i + 1, "Collector", null, null, null));
+        for (int i = 0; i < JfrMemory.CLASS_LIMIT; i++) {
+            BigInteger amount = BigInteger.valueOf(i + 1); weight = weight.add(amount);
+            allocations.add(new JfrMemory.Allocation(i, "Class-" + i, 1, amount, time, time));
+        }
+        var counts = new JfrMemory.Counts(0, 0, 0);
+        var data = new JfrMemory.Data(gc, allocations, counts, counts, counts, weight, time, time.plusSeconds(1), false, "Coverage");
+        SwingUtilities.invokeAndWait(() -> {
+            var panel = new JfrMemoryPanel(); var components = all(panel);
+            JTable gcTable = table(components, 6), allocationTable = table(components, 5);
+            int[] changes = new int[2];
+            gcTable.getModel().addTableModelListener(e -> changes[0]++);
+            allocationTable.getModel().addTableModelListener(e -> changes[1]++);
+            panel.load(data);
+            assertArrayEquals(new int[]{2, 2}, changes, "Each table clears once and replaces once, independently of row count");
+            assertEquals(JfrMemory.GC_LIMIT, gcTable.getRowCount()); assertEquals(JfrMemory.CLASS_LIMIT, allocationTable.getRowCount());
+            assertEquals(BigInteger.valueOf(JfrMemory.CLASS_LIMIT), allocationTable.getValueAt(0, 3));
+            gcTable.getRowSorter().setSortKeys(List.of(new RowSorter.SortKey(1, SortOrder.DESCENDING)));
+            gcTable.setRowSelectionInterval(0, 0);
+            assertTrue(components.stream().filter(JTextArea.class::isInstance).map(JTextArea.class::cast)
+                    .anyMatch(t -> t.getText().contains("GC #4095") && t.getText().contains("Duration: 4096 ns")));
+            JTextField search = components.stream().filter(JTextField.class::isInstance).map(JTextField.class::cast).findFirst().orElseThrow();
+            search.setText("Class-2047");
+            changes[0] = 0; changes[1] = 0; panel.loadScoped(data);
+            assertArrayEquals(new int[]{2, 2}, changes); assertEquals("Class-2047", search.getText());
+            assertEquals(1, allocationTable.getRowCount()); assertEquals("Class-2047", allocationTable.getValueAt(0, 0));
+            assertEquals(-1, gcTable.getSelectedRow()); assertEquals(-1, allocationTable.getSelectedRow());
+            assertFalse(button(components, "Focus event ±100 ms").isEnabled());
+        });
+    }
+    private static JTable table(List<Component> list, int columns) { return list.stream().filter(c -> c instanceof JTable t && t.getColumnCount() == columns).map(JTable.class::cast).findFirst().orElseThrow(); }
     private static JButton button(List<Component> list, String name) { return list.stream().filter(c -> c instanceof JButton b && b.getText().equals(name)).map(JButton.class::cast).findFirst().orElseThrow(); }
     private static List<Component> all(Container root) {
         var list = new ArrayList<Component>(); for (var c : root.getComponents()) { list.add(c); if (c instanceof Container child) list.addAll(all(child)); } return list;

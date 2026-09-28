@@ -16,7 +16,6 @@ public final class AttributeSeries {
 
     public static boolean supports(String type) { return TYPES.contains(type); }
     public void add(Reading reading) {
-        if (reading.start() > reading.end()) throw new IllegalArgumentException("Invalid capture window.");
         if (readings.size() == LIMIT) readings.removeFirst();
         readings.addLast(reading);
     }
@@ -24,6 +23,12 @@ public final class AttributeSeries {
     public List<Reading> readings() { return List.copyOf(readings); }
 
     public record Reading(long start, long end, String exact, Double plotted, String error) {
+        public Reading {
+            if (start > end) {
+                exact = null; plotted = null;
+                error = "Client clock moved backwards during the getter read. Original timestamps retained; numeric value discarded.";
+            }
+        }
         public static Reading missing(long start, long end, String error) {
             String safe = error == null ? "Unavailable" : error;
             return new Reading(start, end, null, null, safe.substring(0, Math.min(512, safe.length())));

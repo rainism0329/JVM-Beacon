@@ -83,4 +83,60 @@ class SnapshotStoreTest {
         assertTrue(SnapshotStore.compare(first, first).contains("Captured scope"));
         assertTrue(SnapshotStore.compare(first, first).contains("not continuous history"));
     }
+
+    @Test void incompleteIdentityNeverEnablesMetricDeltas() {
+        Snapshot first = metricCapture(capture().identity(), 100, 110, "heap.used", 10L, "bytes");
+        Snapshot second = metricCapture(capture().identity(), 200, 210, "heap.used", 20L, "bytes");
+        for (Identity incomplete : List.of(new Identity("fixture", 0, "VM", "21"), new Identity("", 1, "VM", "21"),
+                new Identity("fixture", 1, "—", "21"), new Identity("fixture", 1, "VM", ""))) {
+            Snapshot a = new Snapshot(incomplete, first.sample(), null, ""), b = new Snapshot(incomplete, second.sample(), null, "");
+            for (String report : List.of(SnapshotStore.compare(a, b), SnapshotStore.compare(a, second), SnapshotStore.compare(first, b))) {
+                assertTrue(report.contains("identity is missing or incomplete"));
+                assertFalse(report.contains("; Δ"));
+            }
+        }
+    }
+
+    @Test void metricDeltasRequireOrderedNonOverlappingWindows() {
+        Snapshot first = metricCapture(capture().identity(), 100, 110, "heap.used", 10L, "bytes");
+        for (long[] window : List.of(new long[]{50, 60}, new long[]{100, 110}, new long[]{105, 115}, new long[]{200, 190})) {
+            String report = SnapshotStore.compare(first, metricCapture(first.identity(), window[0], window[1], "heap.used", 20L, "bytes"));
+            assertFalse(report.contains("; Δ"));
+            assertTrue(report.contains("reversed or overlapping capture windows"));
+        }
+        // Adjacent windows are non-overlapping and retain exact integer arithmetic above 2^53.
+        String exact = SnapshotStore.compare(metricCapture(first.identity(), 100, 110, "heap.used", 9007199254740992L, "bytes"),
+                metricCapture(first.identity(), 110, 120, "heap.used", 9007199254740993L, "bytes"));
+        assertTrue(exact.contains("; Δ 1\n"));
+    }
+
+    @Test void cumulativeMetricDecreasesAreNotPresentedAsValidChanges() {
+        for (String key : List.of("gc.time", "gc.count", "cpu.time", "runtime.uptime")) {
+            Snapshot first = metricCapture(capture().identity(), 100, 110, key, 1000L, "unit");
+            String reset = SnapshotStore.compare(first, metricCapture(first.identity(), 200, 210, key, 10L, "unit"));
+            assertFalse(reset.contains("; Δ"));
+            assertTrue(reset.contains("counter decreased"));
+            String increasing = SnapshotStore.compare(first, metricCapture(first.identity(), 200, 210, key, 1001L, "unit"));
+            assertTrue(increasing.contains("; Δ 1\n"));
+            assertTrue(increasing.contains("cannot detect intervening resets"));
+        }
+        String gauge = SnapshotStore.compare(metricCapture(capture().identity(), 100, 110, "heap.used", 1000L, "bytes"),
+                metricCapture(capture().identity(), 200, 210, "heap.used", 990L, "bytes"));
+        assertTrue(gauge.contains("; Δ -1E+1\n"));
+    }
+
+    @Test void unavailableOrChangedUnitMetricsDoNotAcquireDeltas() {
+        Snapshot first = metricCapture(capture().identity(), 100, 110, "heap.used", 10L, "bytes");
+        for (Snapshot second : List.of(metricCapture(first.identity(), 200, 210, "heap.used", null, "bytes"),
+                metricCapture(first.identity(), 200, 210, "heap.used", 20L, "MiB"),
+                metricCapture(first.identity(), 200, 210, "heap.used", Double.NaN, "bytes"))) {
+            String report = SnapshotStore.compare(first, second);
+            assertFalse(report.contains("; Δ"));
+            assertTrue(report.contains("unavailable") || report.contains("not comparable"));
+        }
+    }
+
+    private Snapshot metricCapture(Identity identity, long start, long end, String key, Number value, String unit) {
+        return new Snapshot(identity, new Sample(start, end, List.of(new Metric(key, key, value, unit, value == null ? "Not captured" : null))), null, "");
+    }
 }

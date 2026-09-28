@@ -7,6 +7,14 @@ import java.util.concurrent.atomic.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class SessionRunnerTest {
+    @Test void localJfrOutputErrorsRetainConnectionWhileRemoteReadErrorsInvalidateIt() {
+        String secret = "private-output-path-must-not-appear";
+        String local = SessionRunner.explain("Download JFR", new dev.jvmbeacon.core.JfrCapture.LocalFileException(new java.io.IOException(secret)));
+        assertTrue(local.contains("[FILE]")); assertFalse(local.contains(secret)); assertFalse(SessionRunner.invalidatesConnection(local));
+        String remote = SessionRunner.explain("Download JFR", new java.io.IOException(secret));
+        assertTrue(remote.contains("[IO]")); assertFalse(remote.contains(secret)); assertTrue(SessionRunner.invalidatesConnection(remote));
+    }
+
     @Test void rejectedCapacityRetainsConnectionAndDoesNotSendWork() throws Exception {
         BeaconExecutors runtime = new BeaconExecutors();
         CountDownLatch gate = new CountDownLatch(1), started = new CountDownLatch(4), rejected = new CountDownLatch(1);

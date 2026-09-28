@@ -101,7 +101,7 @@ final class ValueExplorerDialog extends DialogWrapper {
         JBTabbedPane tabs = new JBTabbedPane();
         tabs.addTab("Structure", BeaconUi.split(false, "valueExplorer", left,
                 BeaconUi.section("Selected node", BeaconUi.scroll(detail), copy), .52f));
-        if (capture.root().kind() == StructuredValue.Kind.TABLE) tabs.addTab("Rows", rows());
+        if (capture.root().kind() == StructuredValue.Kind.TABLE) tabs.addTab("Rows", rows(capture, rowDetail));
         panel.add(tabs, BorderLayout.CENTER);
         JTextArea limits = BeaconUi.text((capture.incomplete() ? "PARTIAL CAPTURE" : "CAPTURED VALUE") + " · " + capture.nodeCount()
                 + " nodes · Limits: 512 nodes, 100 children per node, depth 6, 32768 characters; shared attribute budget also applies.\n"
@@ -138,7 +138,20 @@ final class ValueExplorerDialog extends DialogWrapper {
         return match || !node.isLeaf() ? node : null;
     }
 
-    private JComponent rows() {
+    static JComponent rows(StructuredValue capture, JTextArea rowDetail) {
+        // Node names are display labels, not stable keys after truncation. Never merge or align
+        // fields by a potentially truncated label. The tree still retains every captured node.
+        for (var row : capture.root().children()) {
+            Set<String> names = new HashSet<>();
+            if (row.children().stream().anyMatch(field -> field.limited() || field.kind() == StructuredValue.Kind.ERROR
+                    || !names.add(field.name()))) {
+                JTextArea unavailable = BeaconUi.text("Rows unavailable for this partial capture.\n\n"
+                        + "A captured field is truncated, failed, or shares another field's display name. The retained labels cannot safely align table columns.\n\n"
+                        + "Use Structure to inspect each captured field and its value separately. No additional target read is performed.", 6);
+                unavailable.setLineWrap(true); unavailable.setWrapStyleWord(true);
+                return BeaconUi.scroll(unavailable);
+            }
+        }
         // Columns come from captured row fields only, never from another metadata or value request.
         List<String> columns = capture.root().children().stream().flatMap(row -> row.children().stream())
                 .map(StructuredValue.Node::name).distinct().limit(100).toList();

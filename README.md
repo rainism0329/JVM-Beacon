@@ -1,8 +1,8 @@
 # JVM Beacon
 
-IDEA 原生的 JMX 管理与 JVM 运行时诊断工作台。当前开发版本为 **0.14.0**（2026-09-28）：核心流程无需云账号、外部 AI 或上传运行数据。[GitHub 源码仓库](https://github.com/rainism0329/JVM-Beacon) 为私有。本仓库尚未发布到 Marketplace；名称、plugin ID 和发布者信息仍属开发阶段。
+IDEA 原生的 JMX 管理与 JVM 运行时诊断工作台。当前开发版本为 **0.14.1**（2026-09-28）：核心流程无需云账号、外部 AI 或上传运行数据。[GitHub 源码仓库](https://github.com/rainism0329/JVM-Beacon) 为私有。本仓库尚未发布到 Marketplace；名称、plugin ID 和发布者信息仍属开发阶段。
 
-0.14.0 增加 **统一 JFR 时间区间**：库存、采样火焰图、GC、分配压力和等待分析使用同一范围；可从 GC/等待事件直接聚焦前后 100 ms。后台重算、保留已应用筛选，报告明确范围与完整事件时长。保留 JFR 录制/下载、Signal timeline、连接工作区、锁链/线程比较、Hot threads、多连接标签、复杂值浏览、`hostname:port` 和受控 MBean 方法调用。界面保持英文和原生主题。实际验收范围见 [验证记录](docs/validation.md) 和 [GUI 记录](docs/gui-validation.md)，仍是开发预览。
+0.14.1 是现有工作流的审查修复版，处理目标异常误断连、确认期间自动请求竞争、操作结果 pending、比较证据与复杂表格等问题；详见 [本轮审查](docs/audit-2026-09-28.md)。0.14.0 增加 **统一 JFR 时间区间**：库存、采样火焰图、GC、分配压力和等待分析使用同一范围；可从 GC/等待事件直接聚焦前后 100 ms。后台重算、保留已应用筛选，报告明确范围与完整事件时长。保留 JFR 录制/下载、Signal timeline、连接工作区、锁链/线程比较、Hot threads、多连接标签、复杂值浏览、`hostname:port` 和受控 MBean 方法调用。界面保持英文和原生主题。实际验收范围见 [验证记录](docs/validation.md) 和 [GUI 记录](docs/gui-validation.md)，仍是开发预览。
 
 第一次测试可按下方顺序操作：**安装 → 启动测试 JVM → 单连接流程 → 双连接标签页**。完整验收清单、预期结果和排错见 [测试指南](docs/testing.md)。文档中的待执行步骤不代表已经验收通过。
 
@@ -12,7 +12,7 @@ IDEA 原生的 JMX 管理与 JVM 运行时诊断工作台。当前开发版本�
 
 本轮开发与兼容性检查目标是 **IntelliJ IDEA Community / Ultimate 2025.1.3，IC/IU-251.26927.53，JBR 21，Windows**。Community 使用官方完整发行包；被监控测试程序使用 JDK 21。描述符允许的版本范围不等于全部版本均已实测，兼容性检查也不代替 GUI 验收。
 
-1. 在 IDEA 的 **Settings → Plugins → 齿轮 → Install Plugin from Disk…** 选择 [jvm-beacon-0.14.0.zip](build/distributions/jvm-beacon-0.14.0.zip)，按 IDE 提示重新启动；最终包验证状态见上方记录。
+1. 在 IDEA 的 **Settings → Plugins → 齿轮 → Install Plugin from Disk…** 选择 [jvm-beacon-0.14.1.zip](build/distributions/jvm-beacon-0.14.1.zip)，按 IDE 提示重新启动；最终包验证状态见上方记录。
 2. 打开项目，通过 **View → Tool Windows → JVM Beacon** 打开底部工具窗口。
 3. 点击 **Connect JVM…**，选择当前用户可见的本地 Java 进程，或输入 PID。若该进程尚未开启本地管理端点，需要明确勾选 **Allow starting the local management agent if needed**；这会改变目标进程状态。
 4. 连接成功后核对顶部的目标身份和启动时间。默认开启观察模式，自动采样关闭；可在“Telemetry”手动采样或开启每 2 秒采样。
@@ -41,7 +41,7 @@ $env:JAVA_HOME = 'C:\Users\lenovo\.jdks\corretto-21.0.9'
 
 将工作区及 JDK 路径替换为你自己的路径。这个脚本只提供 **Local JVM / PID** 测试，不会打开远程端口。也可传入 `-DurationSeconds 600`，使 fixture 最多运行 10 分钟后退出；定时模式不读取 Enter，以到时退出为准。独立复现核心流程与资源基线运行 `./scripts/smoke-core.ps1`；成功会输出 `CORE_SMOKE_PASS`。2026-09-23 核心验证生成的真实示例现场在 `build/examples/fixture.jvmb`，可用于离线重开。
 
-运行 `./scripts/soak-core.ps1` 可进行默认 180 秒、每 2 秒一次的独立采集资源观察，生成 CSV 与报告；可用 `-DurationSeconds` 设为 20–600 秒。它使用自有认证 loopback JVM，并检查通知、现场读写和目标退出；测量的是独立采集进程，不代表整个 IDEA 的开销。[资源观察](docs/soak-validation.md) 分别保留 **2026-09-24 的 0.6.1 核心复测**与 2026-09-23 历史基线。真实 TLS 测试随 `test` 执行，边界见 [TLS 验证](docs/tls-validation.md)。
+运行 `./scripts/soak-core.ps1` 可进行默认 180 秒、每 2 秒一次的独立采集资源观察，生成 CSV 与报告；可用 `-DurationSeconds` 设为 20–600 秒。它使用自有认证 loopback JVM，并检查通知、现场读写和目标退出；测量的是独立采集进程，不代表整个 IDEA 的开销。[资源观察](docs/soak-validation.md) 保留 **2026-09-28 的 0.14.1 核心复测**及此前历史基线。真实 TLS 测试随 `test` 执行，边界见 [TLS 验证](docs/tls-validation.md)。
 
 程序会输出 PID 和 `READY`。测试 MBean 为 `dev.jvmbeacon.demo:type=Probe,name=Workbench`。
 
@@ -143,7 +143,7 @@ v3 现场格式保存目标标识、最多 120 个保留的指标样本、一份
 
 ## 阅读复杂 MBean 结果
 
-**Explore value… / Explore result…** 展示这次已采集的值、目标和实际读取/调用窗口。`CompositeData` 展开字段，数组显示下标，`TabularData` 显示索引字段并额外提供 Rows 表格；行号不代表跨采集的身份。搜索只影响 Structure，匹配节点的祖先用于保留上下文；Rows 始终显示捕获的行，当前按显示文本排序，不做数值大小推断。原始文本仍可在主工作台复制，树里的 **Copy value** 复制所选节点值（容器节点为摘要）。
+**Explore value… / Explore result…** 展示这次已采集的值、目标和实际读取/调用窗口。`CompositeData` 展开字段，数组显示下标，`TabularData` 显示索引字段并额外提供 Rows 表格；行号不代表跨采集的身份。搜索只影响 Structure，匹配节点的祖先用于保留上下文；Rows 在字段完整且名称无歧义时显示捕获的行；字段截断、失败或名称冲突时明确禁用 Rows，仍可用 Structure 阅读保留节点。Rows 按显示文本排序，不做数值大小推断。原始文本仍可在主工作台复制，树里的 **Copy value** 复制所选节点值（容器节点为摘要）。
 
 工具窗口较矮时可向上拖动顶部边缘，表格与详情之间的细分隔线也可拖动。长文本可以滚动阅读，Rows 的列宽可以调整。此版查看器每次在当前屏幕居中打开，内部的分隔比例会保留。
 
@@ -198,7 +198,7 @@ $beaconIde = 'D:\IdeaProjects\JVM-Beacon\.intellijPlatform\ides\community-2025.1
 2. 可点 **Stop…** 提前停止，或等时限后点 **Check / refresh**。只有目标报告 STOPPED 才允许 **Download .jfr…**。状态标有检查时间，不自动轮询，不把本地倒计时当远程事实。
 3. 选择新的本地文件名。下载上限 64 MiB / 循环预算 45 秒，IDE 最多等待 60 秒；不覆盖已有文件。下载后显示可搜索/排序的事件表，**Inventory details** 保留时间范围、来源及截断说明。事件数不等于耗时、CPU 百分比或所有活动。
 4. **Release…** 关闭本页自有录制并丢弃目标端保留数据。断连、换目标或关闭页也会请求清理，网络失败时不能保证已释放；目标端时限仍限制录制时长，但保留数据可能需要管理员清理。不会接管或关闭其他工具创建的录制。
-5. 无连接时仍可 **Open local .jfr…**。深入分析可用 **Copy file path**，在另行安装的 JDK Mission Control 中 File → Open File 打开。插件不自动安装/启动外部软件；目前没有调用树、火焰图或自动诊断。
+5. 无连接时仍可 **Open local .jfr…**。深入分析可用 **Copy file path**，在另行安装的 JDK Mission Control 中 File → Open File 打开。插件不自动安装/启动外部软件；插件已有下述调用树、火焰图和事件分析；不输出自动根因结论。
 
 `.jfr` 不并入 `.jvmb`，不会自动脱敏，可能含参数、属性、路径、线程/栈及应用数据。只打开可信来源文件；本地解析限制为 64 MiB、200,000 事件、256 个命名类型、5 秒扫描预算，JDK 单次解析可能超出这个软时间预算。32 MiB 目标保留设置不是总内存/磁盘或开销硬上限。当前实测目标为 Corretto 21.0.9；目标没有 JFR MXBean 时显示 UNAVAILABLE。
 
@@ -220,7 +220,7 @@ $beaconIde = 'D:\IdeaProjects\JVM-Beacon\.intellijPlatform\ides\community-2025.1
 4. **Find source candidate…** 仅在类、方法描述符和方法所属行均匹配项目或附加源码时提供候选确认。JFR 没有提供 source filename，源码版本和 class loader 到依赖的映射未验证；匿名/隐藏类、缺行号、重复候选等情况不猜测导航。
 5. **Coverage** 和图上方显示扫描部分状态、缺失栈、被预算省略的样本与截断数量。**Copy evidence** 复制范围说明和选中帧，不自动上传或导出整棵树。没有采样不代表没有活动。
 
-每文件最多保留 20,000 个采样、200,000 帧引用、128 帧/栈、256 个线程、8,192 个不同帧、2 Mi 字符帧元数据；每个名字/描述符上限 512 字符。每棵树 8,192 节点，超过时省略整条样本路径并计数。选择数量不等于完整录制数量；截断栈以 `[older frames not captured]` 显示，按文件遍历先到先保留。当前未提供时间范围筛选、分配火焰图、GC/锁事件关联或完整 JMC 分析。
+每次已应用范围扫描最多保留 20,000 个采样、200,000 帧引用、128 帧/栈、256 个线程、8,192 个不同帧、2 Mi 字符帧元数据；每个名字/描述符上限 512 字符。每棵树 8,192 节点，超过时省略整条样本路径并计数。选择数量不等于完整录制数量；截断栈以 `[older frames not captured]` 显示，按文件遍历先到先保留。已有统一时间范围与 GC/等待事件附近观察；暂无分配火焰图、跨事件因果归因或完整 JMC 分析。
 
 ## JFR GC 与分配分析（0.12.0）
 

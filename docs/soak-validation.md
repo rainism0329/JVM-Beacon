@@ -23,6 +23,23 @@
 
 本装置不能替代 IDEA 内多项目关闭、窗口销毁、迟到回调、长时 CPU/堆基线和 GUI 交互验证。完整项目验证入口见 [validation.md](validation.md)。
 
+## 0.14.1 审查期间核心复测（2026-09-28）
+
+Windows 11 / Corretto 21.0.9 / 16 逻辑处理器；17:14 起执行，默认 180 秒，`RESOURCE_SOAK_PASS` / exit 0。这是本轮核心补丁后的独立进程观察，后续 UI 门控调整不改变此测量路径。构建与审查并行，未做空闲机器基线。
+
+原始文件：[摘要](../build/reports/resource-soak/20260928-171357/summary.md)、[CSV](../build/reports/resource-soak/20260928-171357/samples.csv)、[现场](../build/reports/resource-soak/20260928-171357/last-capture.jvmb)。
+
+| 观察项 | 实际值 |
+|---|---|
+| 采样与工作流 | 180.001 秒 / 90 次；线程与 save/load 各 18 次；订阅/周期取消各 9 次 |
+| sample() 时延 | 中位数 63.428 ms / p95 83.462 ms / 最大 102.363 ms；不含同周期额外操作 |
+| 采集进程 CPU | 2109.375 ms / 平均单逻辑核 1.17187%，包含测试装置 |
+| 最大观测 heap used | 19,774,432 bytes；未强制 GC，不是保留堆或 IDEA 峰值 |
+| 线程 | 三组有限窗口中均 3 个 RMI + 2 个装置线程，平台线程总数 12；不证明无泄漏 |
+| 目标退出及清理 | 退出后读取 3.728 ms 返回 ConnectException；close 也返回 ConnectException，自有目标退出、collector executor 终止、close 调用完成 |
+
+未执行整体 IDEA 长时/8 标签/最大 JFR 的内存或 EDT 基准，不能由上述数值宣称插件整体开销或泄漏自由。
+
 ## 0.6.1 核心复测（2026-09-24）
 
 Windows 11 / Corretto 21.0.9 / 16 逻辑处理器；默认 180 秒，输出 `RESOURCE_SOAK_PASS`，exit 0。本次脚本修正了核心源文件清单遗漏新依赖的问题，改为收集整个纯 JDK 核心目录。与旧记录一样，只测独立采集进程。

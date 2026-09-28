@@ -39,6 +39,9 @@ public final class DemoApplication {
         Double getMissingNumber();
         double getNonFinite();
         int getDeniedNumber();
+        int getIoFailureNumber() throws java.io.IOException;
+        int getTlsFailureNumber() throws javax.net.ssl.SSLException;
+        int getErrorFailureNumber();
         void setCounter(int value);
         String getLabel();
         void setLabel(String value);
@@ -80,6 +83,9 @@ public final class DemoApplication {
         @Override public Double getMissingNumber() { return null; }
         @Override public double getNonFinite() { return Double.NaN; }
         @Override public int getDeniedNumber() { throw new SecurityException("Fixture numeric read denied."); }
+        @Override public int getIoFailureNumber() throws java.io.IOException { throw new java.io.IOException("Fixture getter I/O failure; no transport failed."); }
+        @Override public int getTlsFailureNumber() throws javax.net.ssl.SSLException { throw new javax.net.ssl.SSLException("Fixture getter TLS failure; no handshake failed."); }
+        @Override public int getErrorFailureNumber() { throw new AssertionError("Fixture getter error; no transport failed.", new java.io.IOException("Fixture nested cause.")); }
         @Override public void setCounter(int value) { if (value < 0 || value > 1_000_000) throw new IllegalArgumentException("Counter must be between 0 and 1000000."); counter = value; }
         @Override public String getLabel() { return label; }
         @Override public void setLabel(String value) { if (value.length() > 256) throw new IllegalArgumentException("Label exceeds 256 characters."); label = value; }
