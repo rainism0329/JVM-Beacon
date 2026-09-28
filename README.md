@@ -1,8 +1,8 @@
 # JVM Beacon
 
-IDEA 原生的 JMX 管理与 JVM 运行时诊断工作台。当前开发版本为 **0.14.1**（2026-09-28）：核心流程无需云账号、外部 AI 或上传运行数据。[GitHub 源码仓库](https://github.com/rainism0329/JVM-Beacon) 为私有。本仓库尚未发布到 Marketplace；名称、plugin ID 和发布者信息仍属开发阶段。
+IDEA 原生的 JMX 管理与 JVM 运行时诊断工作台。当前开发版本为 **0.15.0**（2026-09-28）：核心流程无需云账号、外部 AI 或上传运行数据。[GitHub 源码仓库](https://github.com/rainism0329/JVM-Beacon) 为私有。本仓库尚未发布到 Marketplace；名称、plugin ID 和发布者信息仍属开发阶段。
 
-0.14.1 是现有工作流的审查修复版，处理目标异常误断连、确认期间自动请求竞争、操作结果 pending、比较证据与复杂表格等问题；详见 [本轮审查](docs/audit-2026-09-28.md)。0.14.0 增加 **统一 JFR 时间区间**：库存、采样火焰图、GC、分配压力和等待分析使用同一范围；可从 GC/等待事件直接聚焦前后 100 ms。后台重算、保留已应用筛选，报告明确范围与完整事件时长。保留 JFR 录制/下载、Signal timeline、连接工作区、锁链/线程比较、Hot threads、多连接标签、复杂值浏览、`hostname:port` 和受控 MBean 方法调用。界面保持英文和原生主题。实际验收范围见 [验证记录](docs/validation.md) 和 [GUI 记录](docs/gui-validation.md)，仍是开发预览。
+0.15.0 改进 **MBean 工作台**：先展示属性定义和方法签名，属性值用 **Read value / Enter** 单独读取；搜索、排序和切换行不调用 getter。写入成功只回读该属性，write-only 不回读。属性和方法结果使用可调整的左右分栏，方法支持名称/签名过滤；每个值标明自己的采集窗口。保留 JFR 统一区间、火焰图/GC/分配/等待分析、录制下载、Signal timeline、连接工作区、线程诊断、多连接标签、`hostname:port` 和受控方法调用。界面为英文、随 IDEA 主题变化。实际验收范围见 [验证记录](docs/validation.md) 和 [GUI 记录](docs/gui-validation.md)，仍是开发预览。
 
 第一次测试可按下方顺序操作：**安装 → 启动测试 JVM → 单连接流程 → 双连接标签页**。完整验收清单、预期结果和排错见 [测试指南](docs/testing.md)。文档中的待执行步骤不代表已经验收通过。
 
@@ -12,7 +12,7 @@ IDEA 原生的 JMX 管理与 JVM 运行时诊断工作台。当前开发版本�
 
 本轮开发与兼容性检查目标是 **IntelliJ IDEA Community / Ultimate 2025.1.3，IC/IU-251.26927.53，JBR 21，Windows**。Community 使用官方完整发行包；被监控测试程序使用 JDK 21。描述符允许的版本范围不等于全部版本均已实测，兼容性检查也不代替 GUI 验收。
 
-1. 在 IDEA 的 **Settings → Plugins → 齿轮 → Install Plugin from Disk…** 选择 [jvm-beacon-0.14.1.zip](build/distributions/jvm-beacon-0.14.1.zip)，按 IDE 提示重新启动；最终包验证状态见上方记录。
+1. 在 IDEA 的 **Settings → Plugins → 齿轮 → Install Plugin from Disk…** 选择 [jvm-beacon-0.15.0.zip](build/distributions/jvm-beacon-0.15.0.zip)，按 IDE 提示重新启动；最终包验证状态见上方记录。
 2. 打开项目，通过 **View → Tool Windows → JVM Beacon** 打开底部工具窗口。
 3. 点击 **Connect JVM…**，选择当前用户可见的本地 Java 进程，或输入 PID。若该进程尚未开启本地管理端点，需要明确勾选 **Allow starting the local management agent if needed**；这会改变目标进程状态。
 4. 连接成功后核对顶部的目标身份和启动时间。默认开启观察模式，自动采样关闭；可在“Telemetry”手动采样或开启每 2 秒采样。
@@ -43,11 +43,11 @@ $env:JAVA_HOME = 'C:\Users\lenovo\.jdks\corretto-21.0.9'
 
 运行 `./scripts/soak-core.ps1` 可进行默认 180 秒、每 2 秒一次的独立采集资源观察，生成 CSV 与报告；可用 `-DurationSeconds` 设为 20–600 秒。它使用自有认证 loopback JVM，并检查通知、现场读写和目标退出；测量的是独立采集进程，不代表整个 IDEA 的开销。[资源观察](docs/soak-validation.md) 保留 **2026-09-28 的 0.14.1 核心复测**及此前历史基线。真实 TLS 测试随 `test` 执行，边界见 [TLS 验证](docs/tls-validation.md)。
 
-程序会输出 PID 和 `READY`。测试 MBean 为 `dev.jvmbeacon.demo:type=Probe,name=Workbench`。
+程序会输出 PID 和 `READY`。常规测试 MBean 为 `dev.jvmbeacon.demo:type=Probe,name=Workbench`；新增 `dev.jvmbeacon.demo:type=OnDemand,name=Workbench` 用于核对 getter 调用次数，具体见 [按需读取测试](docs/testing.md#mbean-按需读取0150)。
 
 1. **连接与指标**：在插件里选择该 PID，允许启动本地管理代理并连接。查看 heap、CPU、平台线程和 GC 等指标；缺失或不支持的值显示说明，不当作零。
-2. **搜索与复杂值**：进入“MBeans”，搜索 `dev.jvmbeacon.demo`，选择 Probe。选择 `Summary` 或 `Rows`，点击 **Explore value…**：Structure 可用方向键展开、按字段/类型/值搜索，Rows 表格应显示 `current → 7`、`next → 8`（尚未修改 Counter 时）。选择单元格查看类型和精确值，点击列标题排序。可以收藏 MBean。`Forbidden` 和 `Broken` 是故意设计的权限拒绝与异常属性，不会显示成 null。
-3. **属性与操作**：取消顶部“Read-only”，选择 `Counter`，点击“Edit attribute…”并输入 `12`，核对目标后确认。操作 `add` 输入 `2`、`3`，结果应为 `5`；`twice` 输入 JSON 数组 `[1,2,3]`，结果应为 `[2,4,6]`。调用 `inspectRows()` 后点击 **Explore result…** 查看返回表格；已经修改 Counter 时应为 `12`、`13`。每次都单独确认，超时不自动重试。
+2. **搜索与复杂值**：进入“MBeans”，搜索 `dev.jvmbeacon.demo`，选择 Probe。选择 `Summary` 或 `Rows`，先点击 **Read value**（或在属性表按 Enter），再点击 **Explore…**：Structure 可用方向键展开、按字段/类型/值搜索，Rows 表格应显示 `current → 7`、`next → 8`（尚未修改 Counter 时）。选择单元格查看类型和精确值，点击列标题排序。可以收藏 MBean。`Forbidden` 和 `Broken` 是故意设计的权限拒绝与异常属性，不会显示成 null。
+3. **属性与操作**：取消顶部“Read-only”，选择 `Counter`，点击“Edit…”并输入 `12`，核对目标后确认。操作 `add` 输入 `2`、`3`，结果应为 `5`；`twice` 输入 JSON 数组 `[1,2,3]`，结果应为 `[2,4,6]`。调用 `inspectRows()` 后点击 **Explore result…** 查看返回表格；已经修改 Counter 时应为 `12`、`13`。每次都单独确认，超时不自动重试。
 4. **通知**：在“Notifications”页订阅当前 MBean，再调用 `emit`，输入一段测试文本。点击“Refresh”查看结果；最多保留最近 200 条，取消订阅会移除监听器。
 5. **平台线程与源码**：获取平台线程快照后，按名称/ID 或状态筛选，例如搜索 `beacon`；计数是匹配数/已采集数，过滤不会重新查询目标。选择线程阅读栈，双击有文件和行号的栈帧或按 Enter，会按精确二进制类名和成员关系查找项目或已附加源码；多个候选不自动导航。匿名/局部类只能匹配外层候选行时需要确认。源码版本仍须核对；fixture 的虚拟线程不在此采集范围内。
 6. **保存、重开与比较**：进入“Snapshots”，填写备注并保存 `.jvmb`。再采样或获取新线程快照后选择“Compare with file…”，固定结果不会被自动采样覆盖。双方身份匹配且都采过线程时，列出新增观察、未再观察及状态/栈/锁信息变化；不同目标、缺失或无效采集不输出线程变化计数。同 ID 只是匹配候选，不能据此证明持续阻塞、死锁或线程刚创建/结束。“Open snapshot…”成功后切换为离线阅读。
@@ -133,7 +133,7 @@ GC 曲线是近似累计采集时间之和，不是暂停事件或暂停总占�
 
 ## 追踪一个 MBean 数值
 
-在 **MBeans → Attributes** 选择可读数值属性，点击 **Watch attribute…**，核对目标及 getter 的潜在开销后 **Start tracking**。例如 fixture 的 `ElapsedMillis` 会递增，`Counter` 初始为 7。**Watch** 页呈现独立采集窗口、趋势和精确值表；可 Pause / Resume 或 Clear history。读取失败、null、NaN、不支持的返回类型会留下原因并暂停，不当作零。
+在 **MBeans → Attributes** 选择可读数值属性，点击 **Watch…**，核对目标及 getter 的潜在开销后 **Start tracking**。例如 fixture 的 `ElapsedMillis` 会递增，`Counter` 初始为 7。**Watch** 页呈现独立采集窗口、趋势和精确值表；可 Pause / Resume 或 Clear history。读取失败、null、NaN、不支持的返回类型会留下原因并暂停，不当作零。
 
 一次追踪一个数值属性，最多 120 点（含暂停/失败间断标记），工作台可见且无在途请求时每 2 秒尝试采集；与标准指标共用调度。图表使用近似 double，数值表保留受支持值的精确文本，单位未提供时明确为未知。不能补采暂停期间的历史；取消不保证 getter 已停止。断开后保留 STALE，连接另一个 JVM 或离线打开现场会清除旧追踪。**追踪历史不包含在 `.jvmb` 文件中**。
 
@@ -143,11 +143,11 @@ v3 现场格式保存目标标识、最多 120 个保留的指标样本、一份
 
 ## 阅读复杂 MBean 结果
 
-**Explore value… / Explore result…** 展示这次已采集的值、目标和实际读取/调用窗口。`CompositeData` 展开字段，数组显示下标，`TabularData` 显示索引字段并额外提供 Rows 表格；行号不代表跨采集的身份。搜索只影响 Structure，匹配节点的祖先用于保留上下文；Rows 在字段完整且名称无歧义时显示捕获的行；字段截断、失败或名称冲突时明确禁用 Rows，仍可用 Structure 阅读保留节点。Rows 按显示文本排序，不做数值大小推断。原始文本仍可在主工作台复制，树里的 **Copy value** 复制所选节点值（容器节点为摘要）。
+属性先 **Read value**，再 **Explore…**；操作返回后 **Explore result…** 展示这次已采集的值、目标和实际读取/调用窗口。`CompositeData` 展开字段，数组显示下标，`TabularData` 显示索引字段并额外提供 Rows 表格；行号不代表跨采集的身份。搜索只影响 Structure，匹配节点的祖先用于保留上下文；Rows 在字段完整且名称无歧义时显示捕获的行；字段截断、失败或名称冲突时明确禁用 Rows，仍可用 Structure 阅读保留节点。Rows 按显示文本排序，不做数值大小推断。原始文本仍可在主工作台复制，树里的 **Copy value** 复制所选节点值（容器节点为摘要）。
 
 工具窗口较矮时可向上拖动顶部边缘，表格与详情之间的细分隔线也可拖动。长文本可以滚动阅读，Rows 的列宽可以调整。此版查看器每次在当前屏幕居中打开，内部的分隔比例会保留。
 
-后台转换后仅保留不可变展示模型，不将任意远程对象交给 EDT。每个值最多 512 节点、32768 个字符、深度 6、每个容器 100 子项；整批属性额外共享 4096 节点和 262144 字符预算。截断、循环、不支持和读取失败分别说明；超出批次预算的值保留文本提示，禁用 Explore。展示限制不能限制 RMI 接收巨大对象的反序列化开销。嵌套表格可在 Structure 展开，Rows 仅用于顶层 `TabularData`，没有强行展开任意 Java 对象。
+后台转换后仅保留不可变展示模型，不将任意远程对象交给 EDT。每个值最多 512 节点、32768 个字符、深度 6、每个容器 100 子项；每对象最多保留最近 8 项读取，共最多 4096 节点和 262144 结构字符。截断、循环、不支持和读取失败分别说明；已淘汰的值需显式再读，未读取/失败/淘汰项禁用 Explore。展示限制不能限制 RMI 接收巨大对象的反序列化开销。嵌套表格可在 Structure 展开，Rows 仅用于顶层 `TabularData`，没有强行展开任意 Java 对象。
 
 查看器的展开、排序、搜索、复制不重复读取目标。返回值不自动脱敏、不进入 `.jvmb`；再次选择操作会清除上次结果。整个读取/调用流程仍遵守超时、取消和不自动重试的约束。
 
@@ -155,7 +155,7 @@ v3 现场格式保存目标标识、最多 120 个保留的指标样本、一份
 
 - 本地 Attach、远程 JMX/RMI；连接身份、失败阶段提示及手动重连。暂不支持运行配置自动关联、SSH、Jolokia 或容器自动发现。
 - ObjectName 搜索与应用级收藏；属性读取、复杂值文本/结构树/顶层表格、严格类型校验后的写入和精确签名操作调用。编辑支持基础标量、常用数值类型、`ObjectName`、基础类型数组和 `String[]`；不反射构造任意目标对象。
-- 选中 MBean 时读取其可读属性，并对展示数量和文本设上限；这些展示限制不能限制 RMI 接收巨大对象时的反序列化开销，当前仅连接可信目标。
+- 选中 MBean 时只读取元数据，属性值须显式点击 Read value；每对象保留最近 8 次读取，元数据和文本有上限；这些展示限制不能限制 RMI 接收巨大对象时的反序列化开销，当前仅连接可信目标。
 - 实际指标与最多 120 点趋势，2 秒可选采样，无请求重叠；超过 5 秒的采样间隔不连接折线。JFR 提供录制、事件库存、采样调用树/火焰图；不提供健康分或自动根因判断。
 - ThreadMXBean 平台线程快照、名称/ID/状态筛选：最多 512 条线程、每栈最多 64 帧，明确标识截断。现场线程比较只处理已采集范围，最多显示 200 条差异。缺失不等于零，栈未变化不等于持续阻塞；不覆盖虚拟线程。源码和运行字节码版本的一致性仍需用户确认。
 - `.jvmb` 现场保存、离线重开与文本比较；文件上限 5 MiB。指标与线程可能在不同时间采集，不是原子快照，也不能恢复未采集历史。

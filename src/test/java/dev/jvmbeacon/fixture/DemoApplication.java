@@ -31,7 +31,30 @@ import java.util.concurrent.atomic.AtomicReference;
 /** Controlled child JVM. Optional CPU pulse is capped at 120 s, with no unbounded allocations or deadlocks. */
 public final class DemoApplication {
     public static final String BEAN_NAME = "dev.jvmbeacon.demo:type=Probe,name=Workbench";
+    public static final String ON_DEMAND_NAME = "dev.jvmbeacon.demo:type=OnDemand,name=Workbench";
     private static volatile long cpuSink;
+
+    public interface OnDemandMBean {
+        int getFast();
+        void setFast(int value);
+        String getSlow() throws InterruptedException;
+        String getNullValue();
+        void setWriteOnly(String value);
+        String readCounts();
+        String ping();
+    }
+    /** Each getter is observable; Slow is bounded and only runs when explicitly read. */
+    public static final class OnDemand implements OnDemandMBean {
+        private final AtomicLong fastReads = new AtomicLong(), slowReads = new AtomicLong(), nullReads = new AtomicLong();
+        private volatile int fast = 7;
+        @Override public int getFast() { fastReads.incrementAndGet(); return fast; }
+        @Override public void setFast(int value) { fast = value; }
+        @Override public String getSlow() throws InterruptedException { slowReads.incrementAndGet(); Thread.sleep(1500); return "Bounded slow getter completed"; }
+        @Override public String getNullValue() { nullReads.incrementAndGet(); return null; }
+        @Override public void setWriteOnly(String value) { if (value.length() > 256) throw new IllegalArgumentException("Maximum 256 characters"); }
+        @Override public String readCounts() { return "Fast=" + fastReads.get() + ", Slow=" + slowReads.get() + ", NullValue=" + nullReads.get(); }
+        @Override public String ping() { return "pong; no getter was needed"; }
+    }
 
     public interface ProbeMBean {
         int getCounter();
@@ -182,6 +205,7 @@ public final class DemoApplication {
         if (java.util.Arrays.asList(args).contains("--disable-thread-cpu")) ManagementFactory.getThreadMXBean().setThreadCpuTimeEnabled(false);
         Probe probe = new Probe();
         server.registerMBean(probe, new ObjectName(BEAN_NAME));
+        server.registerMBean(new OnDemand(), new ObjectName(ON_DEMAND_NAME));
         CountDownLatch stop = new CountDownLatch(1);
         Thread parked = Thread.ofPlatform().daemon(true).name("beacon-fixture-platform-wait").start(() -> await(stop));
         Thread virtual = Thread.ofVirtual().name("beacon-fixture-virtual-wait").start(() -> await(stop));
@@ -234,6 +258,7 @@ public final class DemoApplication {
             if (connector != null) connector.stop();
             if (registry != null) UnicastRemoteObject.unexportObject(registry, true);
             server.unregisterMBean(new ObjectName(BEAN_NAME));
+            server.unregisterMBean(new ObjectName(ON_DEMAND_NAME));
         }
     }
 

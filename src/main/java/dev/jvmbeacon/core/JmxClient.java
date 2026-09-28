@@ -183,6 +183,23 @@ public final class JmxClient implements AutoCloseable {
         return server.getMBeanInfo(new ObjectName(name));
     }
 
+    /** Already converted on the worker; never hand a remote object graph to the EDT. */
+    public record AttributeReading(long start, long end, String text, StructuredValue structure, String error) { }
+
+    public AttributeReading readAttribute(String bean, String attribute) throws Exception {
+        ensureOpen();
+        long start = System.currentTimeMillis();
+        Object value;
+        try { value = server.getAttribute(new ObjectName(bean), attribute); }
+        catch (Exception e) {
+            throwConnectionFailure(e);
+            String error = safeError(e);
+            return new AttributeReading(start, System.currentTimeMillis(), "Read failed: " + error, null, error);
+        }
+        long end = System.currentTimeMillis();
+        return new AttributeReading(start, end, ValueFormatter.format(value), StructuredValue.capture(attribute, value), null);
+    }
+
     public List<AttributeValue> readAttributes(String name) throws Exception {
         ensureOpen();
         ObjectName objectName = new ObjectName(name);

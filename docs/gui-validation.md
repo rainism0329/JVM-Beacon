@@ -1,6 +1,18 @@
-# GUI 验证记录：0.1.2—0.14.1
+# GUI 验证记录：0.1.2—0.15.0
 
 最近日期：**2026-09-28**，时区 Asia/Shanghai（UTC+08:00）。这是部分真实界面流程的观察记录，**不代表全部 GUI 验收通过**。自动测试、安装包及兼容性检查另见 [验证与接续状态](validation.md)。
+
+## 0.15.0：MBean 工作台最终 JAR
+
+2026-09-28 **18:01:42.461—18:09:38.648**，独立官方 IC 2025.1.3 / JBR 21 / Windows，1388×974 / 125%，Light 与切换后的 Dark。使用 Computer Use 实际点击、输入与截图。ZIP/JAR 哈希见 [validation](validation.md)，当前会话 ERROR 0 / 正常退出。仅连接自有 Corretto 21.0.9 fixture PID **19976**；第一次 GUI 会话只浏览了元数据，未读其 getter；最终会话复用该仍在运行的自有目标。
+
+1. **元数据先行：通过。** OnDemand 的 Fast/Slow/NullValue 显示 Not read，WriteOnly 显示 Write-only；可直接切 Operations 并确认调用 readCounts。[首次计数](../build/reports/ui-0.15.0/zero-getters.png)为 `Fast=0, Slow=0, NullValue=0`，不是模拟数据。
+2. **单项读取和回读：通过。** 属性表选择 Fast 不读值，按 Enter 后为 7。关闭 Read-only、Edit… 输入 42、确认后[该值回读为 42](../build/reports/ui-0.15.0/single-readback.png)，Slow/NullValue 仍未读；再调用 readCounts 得到 [2/0/0](../build/reports/ui-0.15.0/read-counts.png)。窗口明确 UTC 起止与来源，值在详情前部；不是对所有网络延迟的性能承诺。
+3. **过滤和对象切换：通过。** Operations 输入 readCounts，[已有结果与窗口保留](../build/reports/ui-0.15.0/operation-filter.png)；切到 Probe 清除 OnDemand 结果/筛选。属性筛选 Rows 保持 Not read，明确点击 Read value 后得到真值。进入 Explore… → Rows 显示 [current=7、next=8](../build/reports/ui-0.15.0/complex-rows.png)，没有重读全部 getter。
+4. **布局/主题：部分验收。** 属性与结果、方法与结果左右分栏，长说明换行；[Dark](../build/reports/ui-0.15.0/dark-workbench.png)下背景与细分隔随主题变化、原采集值保留。没有执行完整窄窗口、不同缩放、拖动分隔与屏幕阅读器矩阵。
+5. **目标退出：通过。** fixture 按 600 秒截止退出，再点击 Read value，返回 [CONNECTION / STALE](../build/reports/ui-0.15.0/disconnected.png)；读取按钮禁用，Reading 结束，连接原因持续可见。不是主动取消目标代码的证明。最后仅关闭本项目沙箱，用户日常 IDEA 未动。
+
+第一轮界面检查发现长说明横向滚动，已修改并重建；上述证据来自修改后的最终 JAR。未在最终 GUI 逐项测试 write-only、Slow 中途取消、8 项淘汰、所有复杂类型、目标权限错误、Watch 启动/停止、旧 JFR/线程/现场全流程；相关自动用例通过不替代 GUI。
 
 ## 0.14.1：现有功能审查后的真实流程
 

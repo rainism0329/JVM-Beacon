@@ -19,6 +19,7 @@ import com.intellij.ui.components.*;
 import com.intellij.ui.table.JBTable;
 import com.intellij.util.ui.JBUI;
 import dev.jvmbeacon.core.JmxClient;
+import dev.jvmbeacon.core.MBeanMetadata;
 import dev.jvmbeacon.core.SnapshotStore;
 import dev.jvmbeacon.core.TypeCodec;
 import dev.jvmbeacon.core.ValueFormatter;
@@ -29,7 +30,6 @@ import dev.jvmbeacon.core.ThreadComparison;
 import dev.jvmbeacon.core.LockChains;
 import dev.jvmbeacon.core.ConnectionIdentity;
 
-import javax.management.MBeanInfo;
 import javax.management.MBeanOperationInfo;
 import javax.management.MBeanParameterInfo;
 import javax.swing.*;
@@ -109,14 +109,10 @@ public final class BeaconPanel extends JPanel implements Disposable {
     private final DefaultListModel<String> beanModel = new DefaultListModel<>();
     private final JBList<String> beans = new JBList<>(beanModel);
     private final JLabel beanCount = new JLabel("Connect to search MBeans by ObjectName");
-    private final JTextArea beanHeading = textArea("Select an MBean to read its metadata and attributes. Reads may incur target-side overhead or side effects.", 4);
-    private final DefaultTableModel attributeModel = model("Attribute", "Type", "Value / status", "Access");
-    private final JBTable attributes = new JBTable(attributeModel);
-    private List<JmxClient.AttributeValue> attributeValues = List.of();
-    private record AttributePresentation(String text, StructuredValue structure) { }
-    private List<AttributePresentation> attributePresentations = List.of();
-    private String attributeContext = "";
-    private final JButton exploreAttribute = new JButton("Explore value…");
+    private final JTextArea beanHeading = textArea("Select an MBean to load definitions. Attribute values are read on demand.", 2);
+    private final MBeanAttributesPanel attributePanel;
+    private String beanMetadataText = "No metadata loaded.";
+    private long beanGeneration;
     private final JButton exploreOperation = new JButton("Explore result…");
     private StructuredValue operationStructure;
     private String operationContext = "";
@@ -125,9 +121,11 @@ public final class BeaconPanel extends JPanel implements Disposable {
     private String inspectedBean;
     private String pendingBean;
     private boolean rebuildingBeanList;
-    private final JTextArea valueDetail = textArea("Select an attribute to inspect its bounded text representation. Press Ctrl+C to copy.", 6);
     private final DefaultListModel<MBeanOperationInfo> operationModel = new DefaultListModel<>();
     private final JBList<MBeanOperationInfo> operations = new JBList<>(operationModel);
+    private final JBTextField operationSearch = new JBTextField();
+    private List<MBeanOperationInfo> allOperations = List.of();
+    private boolean rebuildingOperations;
     private final JTextArea operationResult = textArea("Select an operation to inspect its parameters and invoke it. Read-only mode blocks writes and invocations by default.", 6);
     private final JLabel subscription = new JLabel("No active subscription");
     private final JTextArea notificationText = textArea("Notifications start at subscription time. Only the latest 200 are retained; earlier history cannot be recovered.", 8);
@@ -164,6 +162,9 @@ public final class BeaconPanel extends JPanel implements Disposable {
     public BeaconPanel(Project project) {
         super(new BorderLayout());
         this.project = project;
+        attributePanel = new MBeanAttributesPanel((label, work, success, failure) ->
+                backgroundWithDeadline(label, true, 8_000, work, success, failure), this::status, this::writeAttribute, this::startWatch,
+                (context, value) -> new ValueExplorerDialog(project, context, value.structure()).show());
         jfr = new JfrPanel(project, this, this::backgroundWithDeadline, this::status, confirmations);
         liveActions.add(timelineLive);
         timelineLive.addActionListener(e -> {
@@ -189,8 +190,8 @@ public final class BeaconPanel extends JPanel implements Disposable {
         operations.putClientProperty("beacon.mono", true);
         frames.putClientProperty("beacon.mono", true);
         beanHeading.setLineWrap(true); beanHeading.setWrapStyleWord(true);
+        operationResult.setLineWrap(true); operationResult.setWrapStyleWord(true);
         threadDetail.setLineWrap(true); threadDetail.setWrapStyleWord(true);
-        BeaconUi.table(attributes, "Select an MBean to inspect its attributes");
         trendMetric.setRenderer(new DefaultListCellRenderer() {{ putClientProperty("html.disable", Boolean.TRUE); }});
         JPanel header = BeaconUi.panel(4); header.setBorder(JBUI.Borders.empty(12, 16));
         JPanel identityPanel = BeaconUi.panel(4);
@@ -366,39 +367,22 @@ public final class BeaconPanel extends JPanel implements Disposable {
             else if (!Objects.equals(selected, inspectedBean)) loadBean();
         });
         JPanel detail = BeaconUi.panel(8); detail.setBorder(JBUI.Borders.empty(12));
-        beanHeading.setRows(3); beanHeading.setBackground(BeaconUi.SURFACE); beanHeading.setForeground(BeaconUi.MUTED);
-        beanHeading.setBorder(JBUI.Borders.empty(2, 4, 8, 4));
-        JBScrollPane beanCaption = BeaconUi.scroll(beanHeading); beanCaption.setPreferredSize(JBUI.size(300, 82));
+        beanHeading.setRows(2); beanHeading.setBackground(BeaconUi.SURFACE); beanHeading.setForeground(BeaconUi.MUTED);
+        beanHeading.setBorder(JBUI.Borders.empty(2, 4));
+        JPanel beanCaption = BeaconUi.panel(4);
+        JBScrollPane captionText = BeaconUi.scroll(beanHeading); captionText.setPreferredSize(JBUI.size(280, 48));
+        beanCaption.add(captionText, BorderLayout.CENTER);
+        JButton metadata = new JButton("Metadata…");
+        metadata.addActionListener(e -> Messages.showInfoMessage(project, beanMetadataText, "MBean metadata"));
+        beanCaption.add(row(metadata, liveButton("Reload", this::loadBean)), BorderLayout.EAST);
         detail.add(beanCaption, BorderLayout.NORTH);
         JBTabbedPane tabs = mbeanTabs;
-        JPanel attrPage = new JPanel(new BorderLayout());
-        attrPage.add(row(liveButton("Refresh", this::loadBean), liveButton("Edit attribute…", this::writeAttribute), liveButton("Watch attribute…", this::startWatch)), BorderLayout.NORTH);
-        attributes.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        exploreAttribute.setEnabled(false); exploreOperation.setEnabled(false);
-        exploreAttribute.addActionListener(e -> {
-            int row = attributes.getSelectedRow();
-            if (row >= 0 && row < attributePresentations.size() && attributePresentations.get(row).structure() != null)
-                new ValueExplorerDialog(project, attributeContext + "\nAttribute: " + attributeValues.get(row).name(), attributePresentations.get(row).structure()).show();
-        });
+        exploreOperation.setEnabled(false);
         exploreOperation.addActionListener(e -> {
             if (operationStructure != null) new ValueExplorerDialog(project, operationContext, operationStructure).show();
         });
-        attributes.getSelectionModel().addListSelectionListener(e -> {
-            int row = attributes.getSelectedRow();
-            exploreAttribute.setEnabled(row >= 0 && row < attributePresentations.size() && attributePresentations.get(row).structure() != null);
-            exploreAttribute.setToolTipText(exploreAttribute.isEnabled() ? "Explore this captured value without another remote read"
-                    : "Select a successfully captured value. Failed reads and values beyond the shared display budget cannot be explored.");
-            if (!e.getValueIsAdjusting() && row >= 0 && row < attributeValues.size()) {
-                JmxClient.AttributeValue attribute = attributeValues.get(row);
-                valueDetail.setText(attribute.name() + " : " + attribute.type() + "\n" + attributePresentations.get(row).text());
-                valueDetail.setCaretPosition(0);
-            }
-        });
-        attributes.getColumnModel().getColumn(0).setPreferredWidth(160); attributes.getColumnModel().getColumn(1).setPreferredWidth(180);
-        attributes.getColumnModel().getColumn(2).setPreferredWidth(300); attributes.getColumnModel().getColumn(3).setPreferredWidth(85);
-        attrPage.add(BeaconUi.split(true, "attributes", BeaconUi.scroll(attributes), BeaconUi.section("Attribute value", BeaconUi.scroll(valueDetail), row(exploreAttribute, copyButton(valueDetail))), .60f), BorderLayout.CENTER);
-        tabs.addTab("Attributes", attrPage);
-        JPanel opPage = new JPanel(new BorderLayout()); opPage.add(row(liveButton("Invoke…", this::invokeOperation)), BorderLayout.NORTH);
+        tabs.addTab("Attributes", attributePanel);
+        JPanel opPage = BeaconUi.panel(0);
         operations.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         operations.setCellRenderer(new DefaultListCellRenderer() {
             { putClientProperty("html.disable", Boolean.TRUE); }
@@ -408,17 +392,22 @@ public final class BeaconPanel extends JPanel implements Disposable {
             }
         });
         operations.addListSelectionListener(e -> {
-            MBeanOperationInfo op = operations.getSelectedValue();
-            if (!e.getValueIsAdjusting()) {
-                operationSelectionGeneration++;
-                invocationPending = false;
-                operationStructure = null; exploreOperation.setEnabled(false);
-                if (op != null) operationResult.setText(operationSignature(op) + "\n" + op.getDescription() + "\nMBean impact=" + op.getImpact() + "; metadata is informational and does not guarantee a side-effect-free invocation.");
-                else operationResult.setText("Select an operation to inspect its parameters and result.");
-            }
+            if (!e.getValueIsAdjusting() && !rebuildingOperations) showOperationSelection();
+        });
+        operationSearch.getEmptyText().setText("Filter name or signature…");
+        operationSearch.getAccessibleContext().setAccessibleName("Filter operations");
+        operationSearch.getDocument().addDocumentListener(new DocumentListener() {
+            public void insertUpdate(DocumentEvent e) { filterOperations(); }
+            public void removeUpdate(DocumentEvent e) { filterOperations(); }
+            public void changedUpdate(DocumentEvent e) { filterOperations(); }
         });
         operations.getEmptyText().setText("Operations for the selected MBean appear here");
-        opPage.add(BeaconUi.split(true, "operations", BeaconUi.scroll(operations), BeaconUi.section("Description & result", BeaconUi.scroll(operationResult), row(exploreOperation, copyButton(operationResult))), .45f), BorderLayout.CENTER);
+        JPanel opBrowser = BeaconUi.panel(6); opBrowser.add(operationSearch, BorderLayout.NORTH);
+        opBrowser.add(BeaconUi.scroll(operations), BorderLayout.CENTER);
+        JPanel opResult = BeaconUi.panel(0);
+        opResult.add(row(liveButton("Invoke…", this::invokeOperation), exploreOperation, copyButton(operationResult)), BorderLayout.NORTH);
+        opResult.add(BeaconUi.scroll(operationResult), BorderLayout.CENTER);
+        opPage.add(BeaconUi.split(false, "operation-workbench-v15", opBrowser, opResult, .40f), BorderLayout.CENTER);
         tabs.addTab("Operations", opPage);
         JPanel notificationPage = new JPanel(new BorderLayout());
         JPanel notifyHeader = new JPanel(new BorderLayout());
@@ -470,10 +459,9 @@ public final class BeaconPanel extends JPanel implements Disposable {
 
     private void startWatch() {
         if (runner.isBusy()) { status("A request is running. Wait for it to finish before reviewing attribute tracking."); return; }
-        int index = attributes.getSelectedRow();
+        MBeanMetadata.Attribute attribute = attributePanel.selected();
         if (client == null || inspectedBean == null || !Objects.equals(inspectedBean, beans.getSelectedValue())
-                || index < 0 || index >= attributeValues.size()) { status("Select a loaded, readable numeric attribute first."); return; }
-        JmxClient.AttributeValue attribute = attributeValues.get(index);
+                || attribute == null) { status("Select a loaded, readable numeric attribute first."); return; }
         if (!attribute.readable() || !AttributeSeries.supports(attribute.type())) {
             status("Tracking supports readable numeric scalar attributes only. Arrays, strings and complex objects are not converted to numbers."); return;
         }
@@ -948,69 +936,71 @@ public final class BeaconPanel extends JPanel implements Disposable {
         if (name == null) { clearBeanDetails(emptyBeanMessage()); return; }
         if (active == null) return;
         if (!Objects.equals(name, inspectedBean)) {
-            clearBeanDetails(name + "\nWaiting to read metadata and attributes…");
+            clearBeanDetails(name + "\nWaiting to load definitions; getters are not called…");
         }
         if (runner.isBusy()) { pendingBean = name; status("A request is running. The selected MBean will be read when it finishes."); return; }
         pendingBean = null;
-        background("Read selected MBean", true, () -> readBean(active, name), data -> {
-            if (!Objects.equals(beans.getSelectedValue(), data.name())) {
+        long expected = ++beanGeneration;
+        background("Load MBean metadata", true, () -> MBeanMetadata.read(active, name), data -> {
+            if (expected != beanGeneration || !Objects.equals(beans.getSelectedValue(), name)) {
                 if (beans.getSelectedValue() == null) status("No MBean is selected. The previous object's result was discarded.");
                 loadBean(); return;
             }
-            inspectedBean = data.name();
-            if (Objects.equals(pendingBean, data.name())) pendingBean = null;
-            beanHeading.setText(data.name() + "\n" + data.info().getDescription() + "\nRead window: " + window(data.captureStart(), data.captureEnd()) + "; attributes are read sequentially, not as an atomic snapshot.");
+            inspectedBean = name;
+            if (Objects.equals(pendingBean, name)) pendingBean = null;
+            String counts = data.attributes().size() + " attributes · " + data.operations().size() + " operations · Values on demand"
+                    + (data.omittedAttributes() + data.omittedOperations() > 0 ? " · Metadata truncated" : "");
+            beanHeading.setText(name + "\n" + counts);
             beanHeading.setCaretPosition(0);
-            attributeValues = data.attributes(); attributePresentations = data.presentations(); attributeModel.setRowCount(0); operationModel.clear();
-            attributeContext = "Target: " + identityLabel() + "\nMBean: " + data.name() + "\nRead window: " + window(data.captureStart(), data.captureEnd()) + " · Sequential attribute reads; not atomic.";
+            beanMetadataText = "Target: " + identityLabel() + "\nMBean: " + name + "\n" + data.description()
+                    + "\nSource: JMX getMBeanInfo · " + window(data.start(), data.end()) + "\n" + counts
+                    + "\nOmitted: " + data.omittedAttributes() + " attributes / " + data.omittedOperations() + " operations"
+                    + "\nDescriptions are bounded. Definitions may change on the target; Reload discards retained attribute values."
+                    + "\nLoading metadata does not call attribute getters, but target metadata code may still have overhead or side effects.";
+            attributePanel.load(data.attributes(), "Target: " + identityLabel() + "\nMBean: " + name,
+                    attribute -> active.readAttribute(name, attribute));
+            operationModel.clear();
             operationSelectionGeneration++;
             operationStructure = null; exploreOperation.setEnabled(false); operationResult.setText("");
-            for (int i = 0; i < attributeValues.size(); i++) {
-                JmxClient.AttributeValue a = attributeValues.get(i);
-                attributeModel.addRow(new Object[]{a.name(), a.type(), shortened(attributePresentations.get(i).text(), 160), (a.readable() ? "Read" : "") + (a.writable() ? "/Write" : "")});
-            }
-            for (MBeanOperationInfo op : data.info().getOperations()) operationModel.addElement(op);
-            valueDetail.setText("Select an attribute to inspect complex values. Display size is bounded; large values are truncated. Arbitrary Java objects cannot be edited.");
-            status("Read " + data.name() + ". Disable Read-only and confirm each request to write attributes or invoke operations.");
+            allOperations = data.operations(); filterOperations();
+            status("Definitions loaded. Select Read value for a single getter, or use Operations. No attribute values have been read.");
         });
     }
     private String emptyBeanMessage() {
         if (offline) return "Offline snapshots do not include arbitrary MBean data. Connect to a JVM to browse MBeans.";
         if (client == null) return "Not connected. Connect to a JVM to search and select MBeans.";
-        return beanModel.isEmpty() ? "No matching MBeans. Adjust the search or turn off Favorites." : "Select an MBean to read its metadata and attributes.";
+        return beanModel.isEmpty() ? "No matching MBeans. Adjust the search or turn off Favorites." : "Select an MBean to load definitions. Attribute values are read on demand.";
     }
 
     private void clearBeanDetails(String message) {
-        inspectedBean = null; pendingBean = null; attributeValues = List.of(); attributePresentations = List.of(); attributeContext = "";
+        beanGeneration++; inspectedBean = null; pendingBean = null; attributePanel.clear(); beanMetadataText = message;
         invocationPending = false;
         operationSelectionGeneration++;
-        operationStructure = null; operationContext = ""; exploreAttribute.setEnabled(false); exploreOperation.setEnabled(false);
-        attributeModel.setRowCount(0); operationModel.clear(); valueDetail.setText(""); operationResult.setText("");
+        operationStructure = null; operationContext = ""; exploreOperation.setEnabled(false);
+        allOperations = List.of(); operationModel.clear(); operationSearch.setText(""); operationResult.setText("");
         beanHeading.setText(message);
     }
 
-    private static BeanData readBean(JmxClient active, String name) throws Exception {
-        long captureStart = System.currentTimeMillis();
-        MBeanInfo info = active.info(name);
-        List<JmxClient.AttributeValue> values = active.readAttributes(name);
-        long captureEnd = System.currentTimeMillis();
-        List<AttributePresentation> presentations = new ArrayList<>(); List<JmxClient.AttributeValue> metadata = new ArrayList<>();
-        StructuredValue.Budget structureBudget = new StructuredValue.Budget(4096, 262_144);
-        int remaining = 1_048_576;
-        for (JmxClient.AttributeValue a : values) {
-            String text = remaining <= 0 ? "[Combined attribute display limit reached: about 1 million characters. This value was not expanded.]"
-                    : a.error() == null ? ValueFormatter.format(a.value()) : "Read failed / unsupported: " + a.error();
-            if (text.length() > remaining && remaining > 0) text = shortened(text, remaining);
-            StructuredValue structure = a.error() == null && a.readable() ? StructuredValue.capture(a.name(), a.value(), structureBudget) : null;
-            if (structure == null && a.error() == null && a.readable()) text += "\n[Explorer batch limit reached: 4096 nodes / 262144 characters.]";
-            remaining -= text.length(); presentations.add(new AttributePresentation(text, structure));
-            // Only bounded presentation text survives on the UI; discard arbitrary remote object graphs.
-            metadata.add(new JmxClient.AttributeValue(a.name(), a.type(), a.readable(), a.writable(), null, a.error()));
-        }
-        return new BeanData(name, info, List.copyOf(metadata), List.copyOf(presentations), captureStart, captureEnd);
+    private void filterOperations() {
+        MBeanOperationInfo previous = operations.getSelectedValue();
+        String query = operationSearch.getText().strip().toLowerCase(Locale.ROOT);
+        rebuildingOperations = true;
+        try {
+            operationModel.clear();
+            for (var op : allOperations) if (operationSignature(op).toLowerCase(Locale.ROOT).contains(query)) operationModel.addElement(op);
+            if (previous != null && operationModel.contains(previous)) operations.setSelectedValue(previous, false);
+        } finally { rebuildingOperations = false; }
+        if (previous != operations.getSelectedValue()) showOperationSelection();
     }
-    private record BeanData(String name, MBeanInfo info, List<JmxClient.AttributeValue> attributes, List<AttributePresentation> presentations,
-                            long captureStart, long captureEnd) {}
+
+    private void showOperationSelection() {
+        MBeanOperationInfo op = operations.getSelectedValue(); operationSelectionGeneration++; invocationPending = false;
+        operationStructure = null; exploreOperation.setEnabled(false);
+        operationResult.setText(op == null ? "Select an operation to inspect its parameters and result."
+                : operationSignature(op) + "\n" + op.getDescription() + "\nMBean impact=" + op.getImpact()
+                + "; metadata is informational and does not guarantee a side-effect-free invocation.");
+        operationResult.setCaretPosition(0);
+    }
 
     private boolean writableContext() {
         if (client == null) { status("Connect to a JVM first."); return false; }
@@ -1022,9 +1012,8 @@ public final class BeaconPanel extends JPanel implements Disposable {
 
     private void writeAttribute() {
         if (!writableContext()) return;
-        int index = attributes.getSelectedRow();
-        if (index < 0 || index >= attributeValues.size()) { status("Select an attribute to edit."); return; }
-        JmxClient.AttributeValue attribute = attributeValues.get(index);
+        MBeanMetadata.Attribute attribute = attributePanel.selected();
+        if (attribute == null) { status("Select an attribute to edit."); return; }
         if (!attribute.writable()) { status("The attribute's metadata marks it as read-only."); return; }
         if (!TypeCodec.supports(attribute.type())) { status("Editing is not supported for type " + attribute.type() + ". Arbitrary objects are not constructed through reflection."); return; }
         JmxClient active = client; String bean = inspectedBean;
@@ -1033,9 +1022,12 @@ public final class BeaconPanel extends JPanel implements Disposable {
         if (client != active || observe.isSelected()) { status("The session or Read-only mode changed. Nothing was written. Verify the target again."); return; }
         if (runner.isBusy()) { status("Another request is running. Nothing was written. Review and confirm the write again after it finishes."); return; }
         String text = input.values().getFirst();
-        background("Write attribute (outcome unknown if timed out)", true, () -> { active.setAttribute(bean, attribute.name(), attribute.type(), text); return true; }, ignored -> {
-            status("Attribute write returned successfully. Reading back the current value…"); loadBean();
-        });
+        long expected = attributePanel.generation();
+        boolean accepted = backgroundWithDeadline("Write attribute (outcome unknown if timed out)", true, 8_000,
+                () -> { active.setAttribute(bean, attribute.name(), attribute.type(), text); return true; },
+                ignored -> attributePanel.readBack(attribute, expected),
+                error -> attributePanel.invalidate(attribute, expected, "Write did not return successfully. Inspect the target before repeating it.\n" + error));
+        if (accepted) attributePanel.invalidate(attribute, expected, "Write pending · Outcome unknown until a response returns");
     }
 
     private void invokeOperation() {
@@ -1253,11 +1245,12 @@ public final class BeaconPanel extends JPanel implements Disposable {
 
     private void clearBeans() {
         objectNames = List.of(); beanModel.clear(); clearBeanDetails("Offline snapshots do not include arbitrary MBean values.");
-        beanHeading.setText("Offline snapshots do not include arbitrary MBean data. Connect to a JVM to browse MBeans."); valueDetail.setText(""); operationResult.setText(""); notificationText.setText("Snapshots do not include notifications."); beanCount.setText("Offline · No MBean directory");
+        beanHeading.setText("Offline snapshots do not include arbitrary MBean data. Connect to a JVM to browse MBeans."); operationResult.setText(""); notificationText.setText("Snapshots do not include notifications."); beanCount.setText("Offline · No MBean directory");
     }
 
     private void updateActions() {
         boolean live = client != null;
+        attributePanel.setSession(live, runner.isBusy(), !observe.isSelected());
         jfr.setSession(client, runner.isBusy(), observe.isSelected());
         hotThreads.setConnectionState(live, runner.isBusy());
         pinThreads.setEnabled(identity != null && dump != null && !runner.isBusy());

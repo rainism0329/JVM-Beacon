@@ -194,3 +194,11 @@
 - 实现与测试证据：独立双阶段 fixture 逐个原始事件核对区间库存、分配权重、GC 与等待；测试中加入纳秒边界、空范围、部分扫描、文件变化、取消和迟到响应。实际数字/GUI 范围见 validation，不从一个文件外推所有 JDK/负载。
 
 产品判断：先把已有视图围绕一次卡顿联动，比增加无共同时间上下文的新图更有价值；效率收益尚属待用户验证的假设。无竞品代码或资源复用，无新增外部依赖。
+
+## 0.15.0：MBean 元数据与显式读取（查询 2026-09-28）
+
+- 官方 API / JDK 21：[MBeanServerConnection](https://docs.oracle.com/en/java/javase/21/docs/api/java.management/javax/management/MBeanServerConnection.html#getMBeanInfo(javax.management.ObjectName)) 将 `getMBeanInfo`（属性/操作定义）、`getAttribute`（单项值）、`getAttributes`（多项值）分别定义。产品由此先加载定义、显式读取单项；这不是对动态 MBean 元数据零开销或无副作用的承诺。
+- 官方 SDK：[Lists and Trees](https://plugins.jetbrains.com/docs/intellij/lists-and-trees.html)，继续使用平台列表、表格、主题组件和已有 OnePixelSplitter，不引入浏览器或图表依赖。
+- 实现证据：0.14.1 的 `readBean` 在展示前对全部属性逐项调用 getter，且写后重读全部。0.15.0 移除此 UI 路径，独立 OnDemand fixture 以可查询计数核验调用范围；实际测试/GUI 状态见 validation。metadata 方法仍受现有网络截止/连接管理约束。
+
+产品判断：减少一个慢 getter 对方法操作和其他属性的牵连，比继续增加功能菜单更有价值。让用户多一次显式 Read value 是清晰控制开销的取舍；效率收益尚未做正式用户研究。没有借用竞品代码/资源，没有新增依赖。

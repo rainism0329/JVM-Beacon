@@ -1,10 +1,10 @@
 # 手动测试指南
 
-适用开发版本：0.14.1。建议环境：Windows、IDEA 2025.1.3、完整 JDK 21。这里只说明**怎么测试**；实际通过/失败/未测范围见 [validation.md](validation.md) 和 [gui-validation.md](gui-validation.md)。不要在未知业务进程上验证写入、方法、压力或退出。
+适用开发版本：0.15.0。建议环境：Windows、IDEA 2025.1.3、完整 JDK 21。这里只说明**怎么测试**；实际通过/失败/未测范围见 [validation.md](validation.md) 和 [gui-validation.md](gui-validation.md)。不要在未知业务进程上验证写入、方法、压力或退出。
 
 ## 准备：约 2 分钟
 
-1. 按 [README 安装步骤](../README.md#安装与开始) 安装 `build/distributions/jvm-beacon-0.14.1.zip`，重启 IDE；在 Plugins 中确认显示 0.14.1。
+1. 按 [README 安装步骤](../README.md#安装与开始) 安装 `build/distributions/jvm-beacon-0.15.0.zip`，重启 IDE；在 Plugins 中确认显示 0.15.0。
 2. 打开 **View → Tool Windows → JVM Beacon**。工具窗口太矮时向上拖顶部边缘；结果区的细分隔线也可以调整。插件自有界面应为英文。
 3. 在 PowerShell 运行以下命令，替换路径。这个终端要保持运行，看到 `PID=…` 和 `READY` 才开始连接。
 
@@ -250,3 +250,24 @@ $env:JAVA_HOME = 'C:\Users\lenovo\.jdks\corretto-21.0.9'
 4. Range 对话框输入负数、反向区间、相等起止、超窗结束、超过 9 位小数，确认拒绝且旧范围不变；合法零起点和纳秒精度应接受。
 5. 仅在自有录制副本上验证：加载后由外部改动该副本，再应用范围，应失败并保留全部旧结果/Update failed，重新 Open 才使用新文件。应用中关闭页/换文件，不得被迟到响应恢复旧内容。
 6. 检查 Light/Dark、125%、键盘操作、GC 及等待详情按钮；小窗口可使用原生滚动/调列宽。不同 JDK/更多缩放、最大录制、8 页/长时间运行另行验收，不由本清单推断通过。
+
+## MBean 按需读取（0.15.0）
+
+先按上方命令启动本轮版本的 fixture，并连接其 PID；老 fixture 不含 OnDemand。界面操作名称以 0.15.0 为准，历史清单中的 Edit attribute / Watch attribute / Explore value 分别对应 Edit… / Watch… / Explore…。旧版“选中即读取”的预期已取消。
+
+1. 搜索 `OnDemand` 并选中 `dev.jvmbeacon.demo:type=OnDemand,name=Workbench`。应立即看见 4 个属性定义和 2 个操作；可读项显示 **Not read**，`WriteOnly` 显示 **Write-only**。在属性间选择、按名字/类型筛选、排序不读取任何 getter。
+2. 关闭 **Read-only**，切到 **Operations**，选择 `readCounts()` → **Invoke…** → 核对目标 → **Execute once**。新进程预期 `Fast=0, Slow=0, NullValue=0`。`ping()` 应返回 `pong; no getter was needed`，无需先读任何属性。方法筛选支持名字/签名；保持同一选择的筛选不清除已有结果。
+3. 回到 **Attributes**，选 `Fast`，点击 **Read value** 或在表格按 Enter。预期值 7，有独立 UTC 读取时窗和 JMX 来源。选 `Slow` 仅看定义，不等待；显式读取才执行约 1.5 秒有界等待。等待期间 IDE 应可响应，切换到其他 MBean 后旧值不能回填。
+4. 在 Fast 上 **Edit…**，填 `42` 并确认。成功后仅回读 Fast；若此前只读过一次 Fast、未读 Slow/NullValue，重新调用 readCounts 应为 `Fast=2, Slow=0, NullValue=0`。WriteOnly 可以编辑，但成功后明确无 getter、不回读。实际次数以自己的显式操作为准。
+5. 显式读取 `NullValue`：显示 `null`，可 Explore，不能显示成未读取或失败。切换 Probe，读 `Rows` / `Summary` → **Explore…**；读 `Forbidden` / `IoFailureNumber` 等应显示目标错误，连接保持。后者不是传输故障。
+6. Probe 有超过 8 个可读属性。依次显式读取 9 个不同属性，最早一项应变 **Evicted · Read again**，最近最多保留 8 项；再选淘汰项不能自己发起读取。每项有自己的窗口，多个值不是原子快照。**Reload** 只刷新元数据并清空本对象值。
+7. 读 Slow 后立即 **Stop waiting**；停止等待后不能永远显示 Reading，不能因迟到结果恢复 LIVE 或填回值。底层 getter 可能继续到时返回，这不等于目标端取消。
+8. 缩小工具窗口，拖动各区域之间的细分隔线；属性定义、读取结果、操作签名和结果均应可独立滚动，Light/Dark 主题下不出现固定亮色粗分隔。保留 Ctrl+C 文本复制和 Copy 按钮，未选择时详情清空、不可读/不可编辑项禁用对应动作。
+
+自动复测（自有认证 loopback 子 JVM，finally 清理）：
+
+```powershell
+.\gradlew.bat test --tests '*MBean*Test' '-PlocalIdePath=D:\IdeaProjects\JVM-Beacon\.intellijPlatform\ides\community-2025.1.3' --offline
+```
+
+这些值仅保留在当前 MBean 页面内，不进入 `.jvmb`。元数据仍是目标代码执行的远程调用，不能保证零开销；展示限额不能限制 RMI 接收对象时的反序列化内存，只连接可信目标。

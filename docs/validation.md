@@ -1,8 +1,29 @@
-# 0.14.1 验证与接续状态
+# 0.15.0 验证与接续状态
 
 日期：2026-09-28，Windows 11 x64。这是**功能开发预览**，完成了下列具体场景，尚未完成全部验收或整个产品愿景。历史记录按版本保留，不由旧构建外推新包通过。
 
-## 0.14.1 当前验证：现有功能审查修复
+## 0.15.0 当前验证：MBean 定义先行与单项读取
+
+交付：选择对象先加载元数据；属性显式 Read value / Enter，写后只回读原属性，write-only 不回读；属性与方法结果改为左右分栏、长文自动换行；方法名称/签名筛选保留同一结果。每对象最多保留最近 8 项读取，淘汰不自动请求。操作调用原有逐次确认、精确签名和超时不重试保持。
+
+最终 [jvm-beacon-0.15.0.zip](../build/distributions/jvm-beacon-0.15.0.zip)：**2026-09-28 18:01:57 +08:00，484,293 bytes**；SHA-256 `139b1308cc690f805561d6ccde012cd3d059ceee8749336dde71ddc2c84617a5`。包内/实际加载 JAR 同为 `de2f9426f46c01df5df9fc3f8887c6e2fc6c0b78e265b352e3b5f0af9145a009`，[核对记录](../build/reports/release-checks-0.15.0.json)。未发布 Release/Marketplace。
+
+| 检查 | 实际结果与边界 |
+|---|---|
+| 最终构建 | `test buildPlugin verifyPlugin` exit 0；**159 项、0 失败/错误/跳过**，本轮新增 8 项。[日志](../build/reports/checks-0.15.0.txt) |
+| 真实 JVM | 独立认证 loopback 子 JVM：metadata/ping 不触发 getter；Fast 单读/写后回读计数；有界 Slow；write-only、null、复杂结构；目标权限/I/O/TLS/error 包装保留连接；observer 拒绝写入。既有认证/TLS、类型、通知、断连、线程、现场与 JFR 用例全量重跑 |
+| Swing 回归 | 选择/过滤/排序不提交请求，Enter 单读；8 项淘汰不回读；重载/断连丢迟到结果；被拒绝提交不进入 pending；回读原属性而非新选中行；失败值不保留旧成功内容；断连结束未知写入状态 |
+| 兼容性 | Verifier 1.408 对 IC/IU **251.26927.53 均 Compatible**；仍有既有 SslRMIClientSocketFactory 的 deprecated 规则提示及 IDE layout WARN，不宣称零警告 |
+| 加载/退出 | IC 2025.1.3 / JBR 21 / Windows：**18:01:42.461** 加载 0.15.0，**18:09:38.648** 正常退出；runIde exit 0，当前会话 ERROR **0**。[日志](../build/reports/ide-load-0.15.0.txt) |
+| 最终 GUI | 自有 Corretto 21.0.9 PID **19976**，1388×974 / 125% / Light→Dark；首次操作计数 0/0/0，Enter 读取 Fast=7，写 42 后只回读 Fast，计数 2/0/0；筛选保持操作结果，换 MBean 清旧数据；Rows 真值 7/8；目标到时退出后显示 CONNECTION / STALE 并结束 Reading。[截图与范围](gui-validation.md) |
+
+开发中 8 项针对性测试先通过；第一轮 GUI 发现长说明需要横向滚动，修正换行和属性值位置后，上表为重新执行的完整 159 项及最终 JAR 验收。日志收集器首次读取运行中 idea.log 遇到文件共享锁，退出沙箱后成功收集；不记为插件功能失败，也没有绕开锁覆盖日志。独立 GUI fixture 按 600 秒截止正常退出，未操作未知 JVM 或关闭用户日常 IDEA。
+
+未验证：IU GUI、完整窄窗口/多缩放/屏幕阅读器、8 标签长时整体 IDE 资源、WAN/容器/更多 JDK/OS。Slow 取消/迟到与 write-only 由自动用例覆盖，未逐项 GUI 演练；旧功能 GUI 未整套重跑，不从自动回归外推通过。本轮无新的性能测量，0.14.1 独立资源基线不能代表 0.15.0 整体 IDEA 开销。
+
+限制：元数据调用仍可能慢，展示限额不能限制 RMI 反序列化资源；仅可信目标。多属性不是原子快照，缓存不保存进 `.jvmb`；未增加操作模板/批量导出/通知筛选。**下一步为 Run/Debug 精确目标关联**，并补凭据清理/资源专项；诊断工作空间、VirtualThreadPinned、allocation 栈继续在路线内。
+
+## 0.14.1 历史验证：现有功能审查修复
 
 修复详情与未解决项见 [本轮审查](audit-2026-09-28.md)。重点是目标异常分类、模态确认/文件选择期间自动请求竞争、操作结果 pending 与选择失效、现场身份/时窗/计数比较、复杂表格截断、本地 JFR 文件失败来源；未增加新分析菜单。README 与测试指南已更正过时能力描述。
 
