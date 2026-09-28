@@ -104,7 +104,7 @@ final class ValueExplorerDialog extends DialogWrapper {
         if (capture.root().kind() == StructuredValue.Kind.TABLE) tabs.addTab("Rows", rows(capture, rowDetail));
         panel.add(tabs, BorderLayout.CENTER);
         JTextArea limits = BeaconUi.text((capture.incomplete() ? "PARTIAL CAPTURE" : "CAPTURED VALUE") + " · " + capture.nodeCount()
-                + " nodes · Limits: 512 nodes, 100 children per node, depth 6, 32768 characters; shared attribute budget also applies.\n"
+                + " nodes · Per-value limits: 512 nodes, 100 children per node, depth 6, 32768 characters.\n"
                 + "Browse and search this capture without another remote read. Values are not automatically redacted or included in snapshot files.", 2);
         limits.setLineWrap(true); limits.setWrapStyleWord(true); limits.setForeground(BeaconUi.MUTED);
         limits.setBackground(BeaconUi.SURFACE); limits.setBorder(JBUI.Borders.empty(4));

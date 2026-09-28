@@ -677,22 +677,15 @@ public final class BeaconPanel extends JPanel implements Disposable {
         // Read on the dedicated local lane. Cancellation also wipes credentials returned late.
         background("Read credentials for explicit reconnect", false, () -> {
             Credentials found = PasswordSafe.getInstance().get(ConnectionDialog.credentialKeyFor(target.address(), target.username()));
-            return new ReconnectSecret(found == null || found.getPassword() == null ? null : found.getPassword().toCharArray());
+            return CredentialSecret.from(found);
         }, secret -> {
             try {
-                if (secret.value == null) {
+                if (!secret.isPresent()) {
                     ConnectionDialog dialog = new ConnectionDialog(project, target);
                     if (confirmations.show(dialog::showAndGet)) connect(dialog.request());
                 } else connect(reconnectRequest(target, secret.take()));
             } finally { secret.close(); }
         });
-    }
-
-    static final class ReconnectSecret implements BeaconExecutors.ManagedConnection {
-        private char[] value;
-        ReconnectSecret(char[] value) { this.value = value; }
-        char[] take() { char[] taken = value; value = null; return taken; }
-        @Override public void close() { if (value != null) { Arrays.fill(value, '\0'); value = null; } }
     }
 
     static ConnectionDialog.Request reconnectRequest(ConnectionDialog.Target target, char[] password) {
@@ -713,25 +706,25 @@ public final class BeaconPanel extends JPanel implements Disposable {
         AtomicReference<String> stage = new AtomicReference<>("Waiting for a connection worker"); connectionStage = stage;
         status("Connecting and verifying target identity…");
         BeaconExecutors runtime = BeaconExecutors.getInstance();
-        boolean accepted = runner.submit(SessionRunner.Lane.NETWORK, "Connect and read target identity", 20_000, () -> {
+        boolean accepted = runner.submit(SessionRunner.Lane.NETWORK, "Connect and read target identity", 20_000, new SecretTask<>(request.password(), password -> {
             BeaconExecutors.ConnectionLease lease = null;
             try {
                 lease = runtime.reserveConnection();
                 JmxClient fresh = request.local() ? JmxClient.connectLocal(request.address(), request.allowAgent(), stage::set)
-                        : JmxClient.connectRemote(request.address(), request.username(), request.password(), request.tlsRegistry(), stage::set);
+                        : JmxClient.connectRemote(request.address(), request.username(), password, request.tlsRegistry(), stage::set);
                 lease.attach(fresh);
                 JmxClient.Identity id = fresh.identity();
                 stage.set("Query the MBean directory");
                 List<String> names = fresh.queryNames();
                 stage.set("Read initial JVM metrics");
                 JmxClient.Sample initial = fresh.sample();
-                char[] credentialsToSave = !request.local() && request.remember() ? request.password().clone() : new char[0];
+                char[] credentialsToSave = !request.local() && request.remember() ? password.clone() : new char[0];
                 return new Connected(fresh, id, names, fresh.namesTruncated(), initial, lease, new AtomicReference<>(credentialsToSave));
             } catch (Exception | LinkageError e) {
                 if (lease != null) lease.close();
                 throw e;
-            } finally { request.erasePassword(); }
-        }, result -> {
+            }
+        }), result -> {
             if (disposed) { SessionRunner.closeLater(result); return; }
             connectionStage.set(null); connectionProblem = null;
             session = result; client = result.client(); identity = result.identity(); offline = false;
@@ -759,10 +752,9 @@ public final class BeaconPanel extends JPanel implements Disposable {
             status("Connected. Read-only mode is on." + (result.truncated() ? " The MBean directory is truncated." : "") + " Auto-sampling is off by default.");
             if (!request.local() && request.remember()) {
                 CredentialAttributes key = request.credentialKey(); String username = request.username(); char[] secret = result.takeCredentials();
-                background("Save credentials for the connected target", false, () -> persistCredentials(key, username, secret), ignored -> status("Connected. Credentials saved in PasswordSafe. Read-only mode is on; auto-sampling is off."));
+                background("Save credentials for the connected target", false, new SecretTask<>(secret, password -> persistCredentials(key, username, password)), ignored -> status("Connected. Credentials saved in PasswordSafe. Read-only mode is on; auto-sampling is off."));
             }
         }, error -> {
-            request.erasePassword();
             if (!disposed) { connectionProblem = error + " Last phase: " + connectionStage.get(); releaseSession(); status(connectionProblem); }
         });
         if (!accepted) { connectionStage.set(null); request.erasePassword(); status("Another request is running. Connection has not started."); }
@@ -777,8 +769,7 @@ public final class BeaconPanel extends JPanel implements Disposable {
     }
 
     private static boolean persistCredentials(CredentialAttributes key, String username, char[] secret) {
-        try { PasswordSafe.getInstance().set(key, new Credentials(username, secret)); return true; }
-        finally { Arrays.fill(secret, '\0'); }
+        PasswordSafe.getInstance().set(key, new Credentials(username, secret)); return true;
     }
 
     private void releaseSession() {
@@ -810,7 +801,7 @@ public final class BeaconPanel extends JPanel implements Disposable {
     }
 
     private <T> boolean backgroundWithDeadline(String label, boolean network, long deadline, Callable<T> work, Consumer<T> success, Consumer<String> failure, boolean showProgress) {
-        if (disposed) return false;
+        if (disposed) { SessionRunner.discardWork(work); return false; }
         boolean accepted = runner.submit(network ? SessionRunner.Lane.NETWORK : SessionRunner.Lane.LOCAL_IO, label, deadline, work, value -> {
             if (disposed) return;
             success.accept(value); updateActions();

@@ -23,6 +23,30 @@
 
 本装置不能替代 IDEA 内多项目关闭、窗口销毁、迟到回调、长时 CPU/堆基线和 GUI 交互验证。完整项目验证入口见 [validation.md](validation.md)。
 
+## 1.0.0-rc.1 首发候选观察（2026-09-28）
+
+Windows 11 / Corretto 21.0.9 / 16 逻辑处理器，23:01 起执行默认 180 秒，`RESOURCE_SOAK_PASS`。核心采集路径之后没有修改，后续更改只涉及 JFR 筛选 UI。原始 [摘要](../build/reports/resource-soak/20260928-230131/summary.md) / [CSV](../build/reports/resource-soak/20260928-230131/samples.csv) / [运行日志](../build/reports/soak-1.0.0-rc.1.txt)。
+
+| 观察项 | 实际值与解释 |
+|---|---|
+| 工作流 | 180.001 s / 90 个指标样本；线程采集与 save/load 各 18 次；订阅/周期移除各 9 次 |
+| sample() 时延 | median 59.750 ms / p95 67.011 ms / max 72.662 ms；不含同周期额外操作 |
+| 独立采集进程 CPU | 2,156.250 ms；平均 1.19791% 单核，包含装置序列化和文件读写 |
+| 最大观察堆 used | 18,675,696 bytes；非强制 GC 后保留量 |
+| 清理 | 自有目标已退出，采集 executor 已终止，close 调用已返回；目标退出后 close 返回 ConnectException，不是未结束的调用 |
+
+另对最终包 IC GUI 做三次 `jcmd Thread.print` / `GC.heap_info`，不触发强制 GC，测量整个 IDE PID 30928：
+
+| 时点 | plugin-owned 线程观察 | 整个 IDE heap used |
+|---|---|---|
+| 活动 JFR 分析页 + 第二空页 | 1 call worker + 1 deadline | 460,600 KiB |
+| 8 混合页（一隐藏活动、一离线、六空页） | 1 deadline，call/local I/O worker 已空闲退出 | 457,068 KiB |
+| Close All 后、重开工作台前 | 1 deadline，无 call/local I/O worker | 371,046 KiB |
+
+原始 [两页线程](../build/reports/rc1/ic-final-two-tabs-threads.txt)、[八页线程](../build/reports/rc1/ic-final-eight-tabs-threads.txt)、[全部关闭后线程](../build/reports/rc1/ic-final-closed-tabs-threads.txt)；对应 `*-heap.txt` 位于同一目录。随后新建连接走完核心流程并离线重开，Close Project 返回欢迎页后又采一次 [线程](../build/reports/rc1/ic-final-project-closed-threads.txt)，同样仅保留应用级 deadline；IDE 正常退出。
+
+这些有限观察没有显示按空标签增长的工作线程，也验证隐藏页停止轮询后可空闲回收。堆变化包含 IDE 索引、JIT、GC 和 UI，不可相减当插件占用；未测最坏八个满载 JFR 页、持续数小时、多项目反复打开关闭或每次 EDT 停顿。并行运行其他 IDE/构建，未建立空闲机器性能基线。[资源预算](decisions.md#生命周期与预算)仍是待测目标；原有小历史预算不能当成八页完整 JFR 分析的已证实内存上限。不把本次有限观察称为无泄漏证明。
+
 ## 0.14.1 审查期间核心复测（2026-09-28）
 
 Windows 11 / Corretto 21.0.9 / 16 逻辑处理器；17:14 起执行，默认 180 秒，`RESOURCE_SOAK_PASS` / exit 0。这是本轮核心补丁后的独立进程观察，后续 UI 门控调整不改变此测量路径。构建与审查并行，未做空闲机器基线。

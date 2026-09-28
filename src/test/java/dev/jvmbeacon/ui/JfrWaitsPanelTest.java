@@ -51,6 +51,21 @@ class JfrWaitsPanelTest {
             panel.clear(); jobs.pending.run(); assertEquals(0, table(components, 6).getRowCount()); assertFalse(apply.isEnabled());
         });
     }
+    @Test void backgroundSamplingKeepsSearchEditableButEnterDoesNotQueueWork() throws Exception {
+        var capture = data(); var initial = JfrWaits.filter(capture, null, "");
+        SwingUtilities.invokeAndWait(() -> {
+            Jobs jobs = new Jobs(); var panel = new JfrWaitsPanel(jobs, f -> {}, s -> {});
+            panel.load(capture, initial);
+            var components = all(panel);
+            var search = components.stream().filter(JTextField.class::isInstance).map(JTextField.class::cast).findFirst().orElseThrow();
+            var selector = components.stream().filter(JComboBox.class::isInstance).map(JComboBox.class::cast).findFirst().orElseThrow();
+            panel.setBusy(true); assertTrue(search.isEnabled()); assertTrue(selector.isEnabled());
+            search.setText("worker"); search.postActionEvent(); assertEquals(0, jobs.requests);
+            panel.setBusy(false); assertEquals("worker", search.getText());
+            search.postActionEvent(); assertEquals(1, jobs.requests); jobs.pending.run();
+            assertEquals(2, table(components, 5).getRowCount());
+        });
+    }
     private static JTable table(List<Component> list, int columns) { return list.stream().filter(c -> c instanceof JTable t && t.getColumnCount() == columns).map(JTable.class::cast).findFirst().orElseThrow(); }
     private static JButton button(List<Component> list, String name) { return list.stream().filter(c -> c instanceof JButton b && name.equals(b.getText())).map(JButton.class::cast).findFirst().orElseThrow(); }
     private static List<Component> all(Container root) { var result = new ArrayList<Component>(); for (var c : root.getComponents()) { result.add(c); if (c instanceof Container child) result.addAll(all(child)); } return result; }

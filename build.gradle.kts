@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "dev.jvmbeacon"
-version = "0.15.0"
+version = "1.0.0-rc.1"
 
 repositories {
     mavenCentral()
@@ -28,6 +28,8 @@ dependencies {
 }
 
 intellijPlatform {
+    // Opt-in isolated acceptance sandbox; never reuse a user's running development IDE.
+    providers.gradleProperty("beaconSandboxPath").orNull?.let { sandboxContainer.set(file(it)) }
     buildSearchableOptions = false
     // No GUI Designer .form files or runtime null instrumentation are required.
     instrumentCode = false

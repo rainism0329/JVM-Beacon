@@ -1,6 +1,24 @@
-# GUI 验证记录：0.1.2—0.15.0
+# GUI 验证记录：0.1.2—1.0.0-rc.1
 
 最近日期：**2026-09-28**，时区 Asia/Shanghai（UTC+08:00）。这是部分真实界面流程的观察记录，**不代表全部 GUI 验收通过**。自动测试、安装包及兼容性检查另见 [验证与接续状态](validation.md)。
+
+## 1.0.0-rc.1：最终包与首轮候选分开验收
+
+环境为 Windows 11 x64、官方 IC 2025.1.3 / JBR 21，1388×974 / 125%；通过 Computer Use 实际操作。最终包 JAR SHA-256 `3e527c20646bc675384215edc79594c91199bf61a4f01ef9d1f6b614f1e2e13f`，与 ZIP 一致。最终会话 **23:21:25.950—23:39:52.457**，正常退出、ERROR 0；[完整 IDE 日志](../build/reports/rc1/ic-final-idea.log)。只连接本轮自有 Corretto 21.0.9 fixture，未操作业务 JVM 或关闭用户日常 IDEA。
+
+最终包实际操作：
+
+1. **JFR / Auto：通过所列路径。** 连接自有 PID 25484，Auto 开启，打开本轮首轮采集的 `ic-recording.jfr`（327,968 bytes / 4,652 events / EOF）。Sampled stacks 的 kind 弹窗跨 **3.2 秒**仍保持打开，[截图](../build/reports/rc1/final-popup.png)；选择 NativeMethodSample 并 Apply 得到 1,456 样本的[真实火焰图](../build/reports/rc1/final-flame.png)。ExecutionSample 为 0 的空状态没有伪造样本。此步骤未重新录制/下载。
+2. **多标签：通过所列路径。** Alt+Insert 增加连接页，第二页打开真实 89 点/4 空档现场，与第一页活动目标并存；再增至[八个标签](../build/reports/rc1/final-eight.png)。第九次请求未创建新页、加号禁用。原生 Close All 后工具窗口收起，重开只剩[新建未连接页 9](../build/reports/rc1/final-close-all.png)，不是循环重建。八页构成为一隐藏活动页、一离线页、六空页。
+3. **最终包完整核心流程：通过。** 新建有时限 fixture PID **3716**（23:32:43 起 / 300 s / 无远程端口），填 PID 并明确允许启动本地管理代理；初始 Read-only / Auto off，点击 Start live trend 后采样增加。选择 Probe 定义不读值，筛选 Counter / Enter 读到 7，Edit 输入 12 / Execute once 后[仅该属性回读 12](../build/reports/rc1/final-write.png)；再确认调用 inspectRows()，[结果 current=12、next=13](../build/reports/rc1/final-invoke.png)。
+4. **线程、保存与重开：通过所列路径。** Capture threads 得到 [13 条平台线程 / 最多 64 帧](../build/reports/rc1/final-threads.png)，明确未报告环不代表排除其他问题；Save snapshot 产生 [ic-final-capture.jvmb](../build/reports/rc1/ic-final-capture.jvmb)，155,099 bytes。目标退出后 Open snapshot 成功，Timeline 显示 [OFFLINE / 56 samples / 3 gaps](../build/reports/rc1/final-reopened.png)；离线采样禁用，保留采集时窗，不恢复之后历史。
+5. **主题与退出：通过所列路径。** Dark→Light 保持当前数据、原生字体/细分隔，[Light 实时图](../build/reports/rc1/final-light.png)；fixture 到时自然退出，最终保留 87 点历史，显示持续的 [CONNECTION / STALE 原因](../build/reports/rc1/final-exit.png)、停止采样并禁用在线动作。自建项目 Close Project 后回到[欢迎页](../build/reports/rc1/final-project-closed.png)，再正常退出自建 IC。线程观察见资源记录。
+
+**首轮候选，不等于最终 JAR：** 第一包 JAR `6d965141dc64fdd4ca505382d3d0dc4b4d2987089f40db5fb0e52754f4322bde`，166 tests。23:05 起连接自有 PID 14200，完成 MBean Counter 写 12、复杂 Rows 浏览、线程和现场保存；Flight Recorder 显式创建 30 秒录制，23:10:22.377—23:10:52.411，刷新 STOPPED 后下载为 `ic-recording.jfr`，读取 4,652 events / 1,456 NativeMethodSample；随后关闭该 IDE，目标 `JFR.check` 显示 No available recordings。原始 [首轮日志](../build/reports/rc1/ic-first-idea.log)、[Rows](../build/reports/rc1/first-rows.png)、[JFR](../build/reports/rc1/first-jfr-native.png)、[录制清理结果](../build/reports/rc1/ic-first-close-recordings.txt)。此轮发现 Auto 请求会让筛选弹窗关闭，已修复后再构建与执行上面的最终包复验。
+
+**Ultimate 尚未 GUI 验收：** 新独立 IU 2025.1.3 沙箱于 23:19:34.742 加载同一最终 JAR、Verifier Compatible，但停在 `Trust and Open Project 'gui-project'?`。Computer Use 明确禁止代操作安全/隐私授权，已请求用户处理，未点 Trust 或改 Defender 排除项。此环境只能记录加载成功，不能记录交互通过。
+
+未在最终包逐项执行全部通知、Watch、Hot threads、锁链/源码定位、所有 JFR 子视图与区间、远程 TLS GUI、八重负载页、窄窗口/多缩放或屏幕阅读器验收。现有自动回归和历史 GUI 记录是补充证据，不转换为当前 GUI 全部通过。
 
 ## 0.15.0：MBean 工作台最终 JAR
 

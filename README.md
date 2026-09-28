@@ -1,8 +1,10 @@
 # JVM Beacon
 
-IDEA 原生的 JMX 管理与 JVM 运行时诊断工作台。当前开发版本为 **0.15.0**（2026-09-28）：核心流程无需云账号、外部 AI 或上传运行数据。[GitHub 源码仓库](https://github.com/rainism0329/JVM-Beacon) 为私有。本仓库尚未发布到 Marketplace；名称、plugin ID 和发布者信息仍属开发阶段。
+IDEA 原生的 JMX 管理与 JVM 运行时诊断工作台。当前首发候选版本为 **1.0.0-rc.1**（2026-09-28）：核心流程无需云账号、外部 AI 或上传运行数据。[GitHub 源码仓库](https://github.com/rainism0329/JVM-Beacon) 为私有；未创建 GitHub Release 或发布 Marketplace。公开发布的名称、plugin ID、发布者及许可证仍需定案。
 
-0.15.0 改进 **MBean 工作台**：先展示属性定义和方法签名，属性值用 **Read value / Enter** 单独读取；搜索、排序和切换行不调用 getter。写入成功只回读该属性，write-only 不回读。属性和方法结果使用可调整的左右分栏，方法支持名称/签名过滤；每个值标明自己的采集窗口。保留 JFR 统一区间、火焰图/GC/分配/等待分析、录制下载、Signal timeline、连接工作区、线程诊断、多连接标签、`hostname:port` 和受控方法调用。界面为英文、随 IDEA 主题变化。实际验收范围见 [验证记录](docs/validation.md) 和 [GUI 记录](docs/gui-validation.md)，仍是开发预览。
+这一轮冻结功能范围，完成凭据取消/拒绝/超时清理、首用与故障处理说明、安装包核对和现有流程验收。已有按需 MBean 读取/写入/方法调用、复杂值/通知/追踪、JFR 统一区间与火焰图/GC/分配/等待分析、录制下载、Signal timeline、线程诊断、现场保存比较、多连接标签和 `hostname:port`。界面为英文、随 IDEA 主题变化。
+
+**[English user guide](docs/user-guide.md)** · **[首发范围与验收](docs/release-candidate.md)** · [更新记录](CHANGELOG.md) · [自动检查](docs/validation.md) · [GUI 证据](docs/gui-validation.md)
 
 第一次测试可按下方顺序操作：**安装 → 启动测试 JVM → 单连接流程 → 双连接标签页**。完整验收清单、预期结果和排错见 [测试指南](docs/testing.md)。文档中的待执行步骤不代表已经验收通过。
 
@@ -10,9 +12,9 @@ IDEA 原生的 JMX 管理与 JVM 运行时诊断工作台。当前开发版本�
 
 ## 安装与开始
 
-本轮开发与兼容性检查目标是 **IntelliJ IDEA Community / Ultimate 2025.1.3，IC/IU-251.26927.53，JBR 21，Windows**。Community 使用官方完整发行包；被监控测试程序使用 JDK 21。描述符允许的版本范围不等于全部版本均已实测，兼容性检查也不代替 GUI 验收。
+首次私有试用建议使用 **IntelliJ IDEA Community 2025.1.3（IC-251.26927.53）/ JBR 21 / Windows**；最终包已完成该环境的核心 GUI 流程。相同 build 的 Ultimate 已通过兼容性与加载检查，但新沙箱停在项目信任提示，GUI 待补验。Community 使用官方完整发行包；被监控测试程序使用 JDK 21。描述符范围和 Verifier 结果不等于全部环境实测。
 
-1. 在 IDEA 的 **Settings → Plugins → 齿轮 → Install Plugin from Disk…** 选择 [jvm-beacon-0.15.0.zip](build/distributions/jvm-beacon-0.15.0.zip)，按 IDE 提示重新启动；最终包验证状态见上方记录。
+1. 在 IDEA 的 **Settings → Plugins → 齿轮 → Install Plugin from Disk…** 选择 [jvm-beacon-1.0.0-rc.1.zip](build/distributions/jvm-beacon-1.0.0-rc.1.zip)，不解压，按 IDE 提示重新启动；最终包验证状态见上方记录。
 2. 打开项目，通过 **View → Tool Windows → JVM Beacon** 打开底部工具窗口。
 3. 点击 **Connect JVM…**，选择当前用户可见的本地 Java 进程，或输入 PID。若该进程尚未开启本地管理端点，需要明确勾选 **Allow starting the local management agent if needed**；这会改变目标进程状态。
 4. 连接成功后核对顶部的目标身份和启动时间。默认开启观察模式，自动采样关闭；可在“Telemetry”手动采样或开启每 2 秒采样。
@@ -41,7 +43,7 @@ $env:JAVA_HOME = 'C:\Users\lenovo\.jdks\corretto-21.0.9'
 
 将工作区及 JDK 路径替换为你自己的路径。这个脚本只提供 **Local JVM / PID** 测试，不会打开远程端口。也可传入 `-DurationSeconds 600`，使 fixture 最多运行 10 分钟后退出；定时模式不读取 Enter，以到时退出为准。独立复现核心流程与资源基线运行 `./scripts/smoke-core.ps1`；成功会输出 `CORE_SMOKE_PASS`。2026-09-23 核心验证生成的真实示例现场在 `build/examples/fixture.jvmb`，可用于离线重开。
 
-运行 `./scripts/soak-core.ps1` 可进行默认 180 秒、每 2 秒一次的独立采集资源观察，生成 CSV 与报告；可用 `-DurationSeconds` 设为 20–600 秒。它使用自有认证 loopback JVM，并检查通知、现场读写和目标退出；测量的是独立采集进程，不代表整个 IDEA 的开销。[资源观察](docs/soak-validation.md) 保留 **2026-09-28 的 0.14.1 核心复测**及此前历史基线。真实 TLS 测试随 `test` 执行，边界见 [TLS 验证](docs/tls-validation.md)。
+运行 `./scripts/soak-core.ps1` 可进行默认 180 秒、每 2 秒一次的独立采集资源观察，生成 CSV 与报告；可用 `-DurationSeconds` 设为 20–600 秒。它使用自有认证 loopback JVM，并检查通知、现场读写和目标退出；测量的是独立采集进程，不代表整个 IDEA 的开销。[资源观察](docs/soak-validation.md) 保留 **1.0.0-rc.1 核心复测与最终包混合标签观察**及此前历史基线。真实 TLS 测试随 `test` 执行，边界见 [TLS 验证](docs/tls-validation.md)。
 
 程序会输出 PID 和 `READY`。常规测试 MBean 为 `dev.jvmbeacon.demo:type=Probe,name=Workbench`；新增 `dev.jvmbeacon.demo:type=OnDemand,name=Workbench` 用于核对 getter 调用次数，具体见 [按需读取测试](docs/testing.md#mbean-按需读取0150)。
 

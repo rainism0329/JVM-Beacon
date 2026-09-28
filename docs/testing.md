@@ -1,10 +1,25 @@
 # 手动测试指南
 
-适用开发版本：0.15.0。建议环境：Windows、IDEA 2025.1.3、完整 JDK 21。这里只说明**怎么测试**；实际通过/失败/未测范围见 [validation.md](validation.md) 和 [gui-validation.md](gui-validation.md)。不要在未知业务进程上验证写入、方法、压力或退出。
+适用首发候选版本：1.0.0-rc.1。建议环境：Windows、IDEA 2025.1.3、完整 JDK 21。这里只说明**怎么测试**；实际通过/失败/未测范围见 [首发验收](release-candidate.md)、[validation.md](validation.md) 和 [gui-validation.md](gui-validation.md)。不要在未知业务进程上验证写入、方法、压力或退出。
+
+## 首发候选的完整验收入口
+
+当前版本 **1.0.0-rc.1**。下文按功能保留操作步骤，版本号表示功能加入时点；实际执行结果以 [首发验收](release-candidate.md) 和 [GUI 记录](gui-validation.md) 为准。普通使用请从 [English user guide](user-guide.md) 开始。
+
+```powershell
+$env:JAVA_HOME = '<完整 JDK 21 路径>'
+.\gradlew.bat test buildPlugin verifyPlugin '-PlocalIdePath=<完整 IC 2025.1.3 路径>' '-PadditionalVerificationIdePath=<完整 IU 2025.1.3 路径>'
+.\scripts\verify-release.ps1
+.\scripts\soak-core.ps1 -DurationSeconds 180
+```
+
+`verify-release.ps1` 核对当前 ZIP 的 descriptor、仅插件 JAR、无 fixture/现场/证书、测试失败/跳过为零，以及两 IDE Verifier 结果。请先跑完整 `test`，不要拿定向测试结果替代全量。若已完成并关闭 runIde，可加 `-IdeSandboxPath '<IC 沙箱目录>','<IU 沙箱目录>'`，核对实际加载 JAR 与包内 SHA-256 相同、当前会话加载版本/退出与 ERROR 行。它不能自动证明 GUI 已验收；手工按连接→采样→MBean→线程→保存重开→JFR→关闭流程执行并记录。
+
+独立运行：`.\gradlew.bat runIde '-PlocalIdePath=<IDE 路径>' '-PbeaconSandboxPath=<工作区内独立目录>'`。每个验收沙箱单独隔离，关闭后才重新打包，不关闭日常 IDEA。更新或回滚安装请见英文指南；不要修改日常 IDE 信任库或开启未认证远程端口来跑测试。
 
 ## 准备：约 2 分钟
 
-1. 按 [README 安装步骤](../README.md#安装与开始) 安装 `build/distributions/jvm-beacon-0.15.0.zip`，重启 IDE；在 Plugins 中确认显示 0.15.0。
+1. 按 [README 安装步骤](../README.md#安装与开始) 安装 `build/distributions/jvm-beacon-1.0.0-rc.1.zip`，重启 IDE；在 Plugins 中确认显示 1.0.0-rc.1。
 2. 打开 **View → Tool Windows → JVM Beacon**。工具窗口太矮时向上拖顶部边缘；结果区的细分隔线也可以调整。插件自有界面应为英文。
 3. 在 PowerShell 运行以下命令，替换路径。这个终端要保持运行，看到 `PID=…` 和 `READY` 才开始连接。
 

@@ -13,6 +13,29 @@ import java.util.function.Consumer;
 import static org.junit.jupiter.api.Assertions.*;
 
 class JfrStacksPanelTest {
+    @Test void backgroundSamplingDoesNotDisableStagedSelectorsOrSubmitThem() throws Exception {
+        var data = new JfrStacks.Data(List.of(), Map.of(), false);
+        var initial = JfrStacks.aggregate(data, JfrStacks.Kind.JAVA, null);
+        SwingUtilities.invokeAndWait(() -> {
+            var calls = new java.util.concurrent.atomic.AtomicInteger();
+            JfrPanel.Jobs jobs = new JfrPanel.Jobs() {
+                public <T> void run(String label, boolean network, long deadline, Callable<T> work, Consumer<T> success, Consumer<String> failure) {
+                    calls.incrementAndGet();
+                    try { var result = (JfrStacks.View) work.call(); assertEquals(JfrStacks.Kind.NATIVE, result.kind()); }
+                    catch (Exception e) { throw new AssertionError(e); }
+                }
+            };
+            var panel = new JfrStacksPanel(jobs, f -> {}, s -> {});
+            panel.load(data, initial);
+            var selectors = all(panel).stream().filter(JComboBox.class::isInstance).map(JComboBox.class::cast).toList();
+            panel.setBusy(true);
+            assertTrue(selectors.stream().allMatch(Component::isEnabled));
+            selectors.getFirst().setSelectedItem(JfrStacks.Kind.NATIVE);
+            button(panel, "Apply filters").doClick(); assertEquals(0, calls.get());
+            panel.setBusy(false); assertEquals(JfrStacks.Kind.NATIVE, selectors.getFirst().getSelectedItem());
+            button(panel, "Apply filters").doClick(); assertEquals(1, calls.get());
+        });
+    }
     @Test void newRecordingClearsHighlightWhileRangeChangesKeepIt() throws Exception {
         var data = new JfrStacks.Data(List.of(), Map.of(), false);
         var view = JfrStacks.aggregate(data, JfrStacks.Kind.JAVA, null);

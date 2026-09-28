@@ -12,7 +12,7 @@ class ReconnectSafetyTest {
         var identity = new JmxClient.Identity("1@fixture", 1000, "VM", "21");
         var target = new ConnectionDialog.Target(true, "42", "", false, null, "", identity);
         char[] password = "test-only".toCharArray();
-        var secret = new BeaconPanel.ReconnectSecret(password);
+        var secret = new CredentialSecret(password);
         var request = BeaconPanel.reconnectRequest(target, secret.take());
         secret.close();
         assertArrayEquals("test-only".toCharArray(), request.password());
@@ -31,7 +31,7 @@ class ReconnectSafetyTest {
                 started.countDown();
                 boolean waiting = true;
                 while (waiting) try { gate.await(); waiting = false; } catch (InterruptedException ignored) { }
-                var secret = new BeaconPanel.ReconnectSecret(password);
+                var secret = new CredentialSecret(password);
                 return (BeaconExecutors.ManagedConnection) () -> { secret.close(); erased.countDown(); };
             }, value -> published.incrementAndGet(), error -> timedOut.countDown()));
             assertTrue(started.await(3, TimeUnit.SECONDS)); assertTrue(timedOut.await(3, TimeUnit.SECONDS));

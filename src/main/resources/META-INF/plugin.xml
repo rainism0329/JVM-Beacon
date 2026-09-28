@@ -1,12 +1,27 @@
 <idea-plugin>
     <id>dev.jvmbeacon</id>
     <name>JVM Beacon</name>
-    <vendor>JVM Beacon contributors (development build)</vendor>
+    <vendor>JVM Beacon contributors</vendor>
     <description><![CDATA[
-      An IDEA-native JMX and JVM runtime workbench. Connect to local or remote JVMs,
-      inspect MBeans, capture platform threads and save diagnostic evidence locally.
-      Development preview; no cloud account or telemetry.
+      <p>An IDEA-native JMX and JVM runtime workbench. Connect to local JVMs or remote
+      JMX endpoints, keep independent connection tabs, and start in read-only mode.</p>
+      <ul>
+        <li>Search MBeans, read individual attributes, inspect structured values, invoke exposed operations with confirmation, and receive notifications.</li>
+        <li>Follow JVM metrics, inspect platform threads and lock chains, compare snapshots, and save diagnostic evidence locally.</li>
+        <li>Capture bounded JFR recordings and explore sampled stacks, GC, allocation samples and recorded waits with a shared time range.</li>
+      </ul>
+      <p>No cloud account, AI service or plugin telemetry. Credentials use IDEA PasswordSafe.
+      Diagnostic files are not automatically redacted. Platform-thread snapshots do not cover virtual threads.</p>
+      <p>First release candidate for private evaluation. Validated support is recorded in the repository release notes.</p>
     ]]></description>
+    <change-notes><![CDATA[
+      <p>1.0.0-rc.1: first release candidate, focused on completing existing workflows.</p>
+      <ul>
+        <li>Explicit credential ownership for rejected, cancelled and timed-out tasks; late PasswordSafe results are cleared.</li>
+        <li>On-demand MBean attribute reads, bounded structured-value exploration and precise operation signatures.</li>
+        <li>Installation, troubleshooting, data handling and release acceptance documentation.</li>
+      </ul>
+    ]]></change-notes>
     <depends>com.intellij.modules.platform</depends>
     <depends>com.intellij.java</depends>
     <extensions defaultExtensionNs="com.intellij">

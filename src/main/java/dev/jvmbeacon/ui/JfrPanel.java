@@ -228,7 +228,7 @@ final class JfrPanel extends JPanel {
                 : "Reported state: " + next.state() + " · Recording #" + next.id() + " · " + next.durationSeconds() + " s limit · Stored bytes: " + next.bytes()
                 + "\nStarted: " + instant(next.startTime()) + " · Stop (expected/actual): " + instant(next.stopTime())
                 ;
-        stateText.setText(details + "\nChecked: " + instant(next.checkedAt()) + " · Refresh to verify changes. Turn off Read-only to record.");
+        stateText.setText(details + "\nChecked: " + instant(next.checkedAt()) + " · Refresh to verify changes. Recording actions require Read-only to be off and explicit confirmation.");
         stateText.setToolTipText("Target: " + (client == null ? "Disconnected" : client.identity().runtimeName()) + " · Recording name: " + next.name());
         stateText.setCaretPosition(0); updateActions(); status.accept("JFR state checked. No continuous polling; refresh after the duration to download.");
     }

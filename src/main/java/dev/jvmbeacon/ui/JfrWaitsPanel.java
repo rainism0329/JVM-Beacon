@@ -97,7 +97,9 @@ final class JfrWaitsPanel extends JPanel {
     }
     void setBusy(boolean busy) { this.busy = busy; actions(); }
     private void actions() {
-        apply.setEnabled(data != null && !busy); kind.setEnabled(!busy); search.setEnabled(!busy);
+        apply.setEnabled(data != null && !busy);
+        // Editing a local filter sends no work. Keep focus/popups during background sampling.
+        kind.setEnabled(data != null); search.setEnabled(data != null);
         drill.setEnabled(view != null && tabs.getSelectedIndex() == 0 && hotTable.getSelectedRow() >= 0);
         reset.setEnabled(view != null); inspect.setEnabled(selectedEvent() != null); copy.setEnabled(view != null);
     }

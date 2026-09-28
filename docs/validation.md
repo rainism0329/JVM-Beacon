@@ -1,4 +1,23 @@
-# 0.15.0 验证与接续状态
+# 1.0.0-rc.1 验证与接续状态
+
+2026-09-28：**首个私有试用发布候选**，推荐环境为 Windows / 官方完整 IC 2025.1.3 / JBR 21。首发范围、SHA-256、限制和下一步集中在 [候选验收](release-candidate.md)，使用见 [英文指南](user-guide.md)。下方历史记录仍只对应各自版本。
+
+| 当前检查 | 实际结果 |
+|---|---|
+| 最终构建 | `test buildPlugin verifyPlugin` exit 0，168 tests，0 failure/error/skipped；[完整日志](../build/reports/checks-1.0.0-rc.1-final.txt) |
+| 修复回归 | 7 项 SecretTask/凭据所有权用例覆盖成功、异常、busy/closed/capacity 拒绝、启动前取消/超时、运行中不提前擦除和迟到结果；2 项 JFR 组件用例覆盖 Auto busy 期间保留筛选编辑、未准入不提交、之后显式 Apply |
+| 既有核心 | 认证/TLS、权限、MBean 类型/结构/通知/异常/显式读取、断连、线程锁链/CPU、现场/Timeline、JFR 录制下载及离线分析用例全量重跑；测试目标为独立且 finally 清理的 JVM |
+| 同包兼容检查 | IC/IU 251.26927.53 均 Compatible；各 1 条既有 deprecated API 提示；非零警告、不等于 GUI 验收 |
+| 交付包 | 488,429 bytes；只有插件 JAR，未混入测试类/fixture/证书/诊断材料；SHA 与实际 IC 加载 JAR一致。[机器核对结果](../build/reports/release-checks-1.0.0-rc.1.json) |
+| IC 加载/GUI/退出 | 最终包 23:21:25.950—23:39:52.457，ERROR 0 / runIde exit 0；真实本地连接→趋势→MBean 读写/调用→线程→保存重开→目标退出、8 标签/Close All、项目关闭；Dark→Light；JFR Auto 下筛选与火焰图。[证据](gui-validation.md) |
+| IU 边界 | 23:19:34.742 加载同一包；新沙箱停在项目信任提示，尚未操作插件。未代点安全授权，GUI 未通过。独立目录 `build/acceptance-sandbox/jvm-beacon/IU-2025.1.3`，窗口等待用户处理 |
+| 资源 | 180 秒独立核心采集通过；最终 IC 混合八标签及关闭后的线程/堆观察另列于 [资源记录](soak-validation.md)，不称长期无泄漏 |
+
+最初候选为 166 tests。真实 GUI 暴露了 JFR 筛选框被 Auto busy 切换关闭的问题，修复后增加两项回归并重跑全部检查。一次新增测试编译失败已修复；最终结果不包含失败/跳过。sandbox 内测试 fixture 编译曾受权限环境阻碍，提权后按原脚本运行成功；未修改测试逻辑规避失败。首轮 JFR 创建/停止/下载操作与最终包离线分析复验分开列出。
+
+当前没有在上述已验收路径上遗留已知阻断缺陷。Ultimate GUI、真实 WAN/TLS 企业配置、八个重负载分析页、多项目长时压力以及完整辅助技术/缩放矩阵仍未完成；不得把这句话解释成已证明没有缺陷。未公开仓库或发布 Marketplace/GitHub Release。
+
+## 历史：0.15.0
 
 日期：2026-09-28，Windows 11 x64。这是**功能开发预览**，完成了下列具体场景，尚未完成全部验收或整个产品愿景。历史记录按版本保留，不由旧构建外推新包通过。
 

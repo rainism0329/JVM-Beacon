@@ -6,11 +6,15 @@ import java.net.ConnectException;
 import java.net.SocketTimeoutException;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
 /** One outstanding request per view. Connection results must implement ManagedConnection for late-result cleanup. */
 public final class SessionRunner implements AutoCloseable {
     public enum Lane { NETWORK, LOCAL_IO }
+    /** Unstarted task inputs must be releasable without blocking or doing I/O. */
+    interface OwnedWork<T> extends Callable<T> { void discard(); }
+    static void discardWork(Callable<?> work) { if (work instanceof OwnedWork<?> owned) owned.discard(); }
     private final BeaconExecutors executors;
     private final long timeoutMillis;
     private Request<?> current;
@@ -35,7 +39,7 @@ public final class SessionRunner implements AutoCloseable {
     /** Cold Attach/agent initialization has its own bounded deadline; ordinary requests keep 8 s. */
     public synchronized <T> boolean submit(Lane lane, String label, long deadlineMillis, Callable<T> work, Consumer<T> success, Consumer<String> failure) {
         if (deadlineMillis <= 0 || deadlineMillis > 60_000) throw new IllegalArgumentException("Deadline must be between 1 and 60000 ms.");
-        if (closed || current != null) return false;
+        if (closed || current != null) { discardWork(work); return false; }
         Request<T> request = new Request<>(this, lane, label, work, success, failure);
         current = request;
         try {
@@ -75,7 +79,7 @@ public final class SessionRunner implements AutoCloseable {
         private final String label;
         private final Lane lane;
         private final AtomicBoolean finished = new AtomicBoolean();
-        private Callable<T> work;
+        private final AtomicReference<Callable<T>> work;
         private volatile Consumer<T> success;
         private volatile Consumer<String> failure;
         private volatile Future<?> future;
@@ -86,15 +90,15 @@ public final class SessionRunner implements AutoCloseable {
             this.owner = new WeakReference<>(owner);
             this.label = label;
             this.lane = lane;
-            this.work = work;
+            this.work = new AtomicReference<>(work);
             this.success = success;
             this.failure = failure;
         }
 
         void run() {
-            Callable<T> operation = work;
-            work = null;
-            if (finished.get()) return;
+            Callable<T> operation = work.getAndSet(null);
+            if (operation == null) return;
+            if (finished.get()) { discardWork(operation); return; }
             try { deliver(operation.call(), null); }
             catch (Exception error) { deliver(null, explain(label, error, lane)); }
             catch (LinkageError error) { deliver(null, "[RUNTIME] The IDE runtime is missing a required module. Use a complete JBR/JDK 21 and check Attach support."); }
@@ -114,7 +118,9 @@ public final class SessionRunner implements AutoCloseable {
             failure = null;
             if (deadline != null) deadline.cancel(false);
             if (future != null) future.cancel(true);
-            // Do not clear work here: a starting worker owns it. Late managed connections keep their cleanup permit.
+            // Exactly one path owns the input: an admitted worker or this nonblocking discard.
+            // Running work wipes its own input on return; cancellation cannot stop native/RMI I/O.
+            discardWork(work.getAndSet(null));
         }
 
         void deliver(T value, String error) {
@@ -122,6 +128,7 @@ public final class SessionRunner implements AutoCloseable {
                 disposeResult(value);
                 return;
             }
+            discardWork(work.getAndSet(null));
             if (deadline != null) deadline.cancel(false);
             SwingUtilities.invokeLater(() -> {
                 SessionRunner runner = owner.get();

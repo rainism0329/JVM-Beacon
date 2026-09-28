@@ -147,7 +147,9 @@ final class JfrStacksPanel extends JPanel {
         details.setCaretPosition(0); updateActions();
     }
     private void updateActions() {
-        kind.setEnabled(!busy && data != null); threads.setEnabled(!busy && data != null); apply.setEnabled(!busy && data != null);
+        // Selectors only stage a local filter. Disabling them for every live sample closes
+        // an open popup and steals focus; admission is enforced by Apply and apply().
+        kind.setEnabled(data != null); threads.setEnabled(data != null); apply.setEnabled(!busy && data != null);
         zoom.setEnabled(selected != null && selected.inclusive() > 0); reset.setEnabled(view != null); copy.setEnabled(view != null);
         source.setEnabled(selected != null && selected.frame() != null && selected.frame().line() > 0);
     }

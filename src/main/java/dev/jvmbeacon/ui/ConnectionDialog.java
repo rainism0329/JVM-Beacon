@@ -377,14 +377,19 @@ final class ConnectionDialog extends DialogWrapper {
         try { endpoint = RemoteEndpoint.normalize(url.getText()); }
         catch (IllegalArgumentException e) { showMessage(e.getMessage(), true); return; }
         String originalInput = url.getText(), user = username.getText().trim();
-        if (!runner.submit(SessionRunner.Lane.LOCAL_IO, "Read PasswordSafe", () -> PasswordSafe.getInstance().get(credentialKeyFor(endpoint, user)), credentials -> {
+        if (!runner.submit(SessionRunner.Lane.LOCAL_IO, "Read PasswordSafe", () -> CredentialSecret.from(PasswordSafe.getInstance().get(credentialKeyFor(endpoint, user))), credentials -> {
+            try {
             if (isDisposed()) return;
             if (!originalInput.equals(url.getText()) || !user.equals(username.getText().trim())) {
                 showMessage("The address or username changed. Credentials read for the previous target were discarded.", false); return;
             }
-            if (credentials == null) { showMessage("No saved credentials for this address and username.", false); return; }
-            password.setText(credentials.getPasswordAsString());
+            if (!credentials.isPresent()) { showMessage("No saved credentials for this address and username.", false); return; }
+            char[] secret = credentials.take();
+            // Swing's text model needs a String; only our mutable copy can be explicitly wiped.
+            try { password.setText(new String(secret)); }
+            finally { Arrays.fill(secret, '\0'); }
             showMessage("Loaded from PasswordSafe. Credentials are excluded from project files and snapshots.", false);
+            } finally { credentials.close(); }
         }, error -> { if (!isDisposed()) showMessage(error, true); })) showMessage("A task is running. Load credentials once it finishes.", false);
         else showMessage("Reading credentials for this address and username from PasswordSafe…", false);
     }
