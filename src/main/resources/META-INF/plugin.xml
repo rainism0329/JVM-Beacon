@@ -1,10 +1,11 @@
 <idea-plugin>
     <id>dev.jvmbeacon</id>
     <name>JVM Beacon</name>
-    <vendor>JVM Beacon contributors</vendor>
+    <vendor url="https://plugins.jetbrains.com/vendor/philz_dev">Philip Zhang</vendor>
     <description><![CDATA[
-      <p>An IDEA-native JMX and JVM runtime workbench. Connect to local JVMs or remote
-      JMX endpoints, keep independent connection tabs, and start in read-only mode.</p>
+      <p>JMX &amp; JFR diagnostics in IntelliJ IDEA.</p>
+      <p>Connect to a running JVM, inspect an MBean, follow a live trend, investigate
+      platform threads, and explore a Flight Recorder capture in one native workbench.</p>
       <ul>
         <li>Search MBeans, read individual attributes, inspect structured values, invoke exposed operations with confirmation, and receive notifications.</li>
         <li>Follow JVM metrics, inspect platform threads and lock chains, compare snapshots, and save diagnostic evidence locally.</li>
@@ -12,14 +13,16 @@
       </ul>
       <p>No cloud account, AI service or plugin telemetry. Credentials use IDEA PasswordSafe.
       Diagnostic files are not automatically redacted. Platform-thread snapshots do not cover virtual threads.</p>
-      <p>First release candidate for private evaluation. Validated support is recorded in the repository release notes.</p>
+      <p>Release candidate. Evaluated on Windows with IntelliJ IDEA Community 2025.1.3
+      and JBR 21. Other environments require validation. Thread snapshots cover platform threads;
+      JFR analysis describes recorded events and applies explicit file and retention limits.</p>
     ]]></description>
     <change-notes><![CDATA[
-      <p>1.0.0-rc.1: first release candidate, focused on completing existing workflows.</p>
+      <p>1.0.0-rc.2: publication assets and final release preparation.</p>
       <ul>
-        <li>Explicit credential ownership for rejected, cancelled and timed-out tasks; late PasswordSafe results are cleared.</li>
-        <li>On-demand MBean attribute reads, bounded structured-value exploration and precise operation signatures.</li>
-        <li>Installation, troubleshooting, data handling and release acceptance documentation.</li>
+        <li>Original light and dark plugin logos for the Plugin Manager and Marketplace.</li>
+        <li>Clear English introduction, first-use guidance and evidence-aware capability descriptions.</li>
+        <li>Reproducible checks for packaged logos, screenshots and publication materials.</li>
       </ul>
     ]]></change-notes>
     <depends>com.intellij.modules.platform</depends>

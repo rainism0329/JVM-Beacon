@@ -1,6 +1,28 @@
-# GUI 验证记录：0.1.2—1.0.0-rc.1
+# GUI 验证记录
 
-最近日期：**2026-09-28**，时区 Asia/Shanghai（UTC+08:00）。这是部分真实界面流程的观察记录，**不代表全部 GUI 验收通过**。自动测试、安装包及兼容性检查另见 [验证与接续状态](validation.md)。
+## 1.0.0-rc.2 · 同包发布截图
+
+2026-09-30，官方完整 IC 2025.1.3 / JBR 21 / Windows，125% 缩放。初始窗口 1388×974，随后原生最大化为 1707×1019；六张发布截图均为后者原始尺寸。最终 ZIP SHA-256 `2cde88b40c4da2037a1780b3474bdadc9a3354fda73a68e9c05a4b8df90dfccc`；加载沙箱 JAR 为 `adba2ca07218027783383a9f9b4018c2f7902db0e3111d46498f63837e507071`，与包内逐字节一致。会话 **15:25:13.196—16:00:30.996**，ERROR 0、runIde exit 0；[包/日志核对](../build/reports/release-checks-1.0.0-rc.2.json)。仅操作项目自有沙箱；未操作或关闭用户日常 IDEA。
+
+真实截图与逐图说明见 [media](marketplace/media/README.md)，文件摘要见 `marketplace/media/manifest.json`。截图采用同包实际界面、自有有界 JVM 和真实 JFR 文件，不使用绘制/生成的假产品截图。品牌 PNG 是原创 SVG 的真实渲染，单独标明为品牌资产。
+
+读取记录：`capture-jfr-demo.ps1`、`capture-memory-demo.ps1`、`capture-waits-demo.ps1` 于 15:17 执行，分别 JFR_CAPTURE_PASS / MEMORY_RECORDING_PASS / WAIT_RECORDING_PASS，独立目标已退出。`run-marketplace-demo.ps1` 15:27:38 启动认证 loopback fixture，PID 10848，最多 600 秒；Runtime.Name 仅报告主机名 `beacon-demo`，不修改指标与目标操作。
+
+`run-marketplace-demo` 到时正常结束，MARKETPLACE_DEMO_CLOSED；未连接未知目标。真实离线现场由 `capture-marketplace-demo.ps1` 于 15:36 另起自有认证目标生成，采集/清理 17.042 秒，MARKETPLACE_CAPTURE_PASS，owned fixture 已退出。A 中确认三成员锁链，显式释放后生成 B；8 点 Timeline 由每次真实采集、2 秒间隔得到，不回填历史。
+
+本次实际 GUI 观察：
+
+1. **主题与标签：通过所列路径。** 项目无需新信任提示；Light → Dark 成功。创建三个原生 Content 页，在离线 Timeline、锁链和 JFR 之间切换，各页状态保留；没有演练八页极限。
+2. **Timeline 重开：通过。** 目标 `13832@beacon-demo`，启动 15:36:09.242，8 点采集 15:36:10.933—15:36:25.558，0 个 >5 s 空档，明确 OFFLINE。末点 CPU 0.237%、heap 7.554 MiB、累计 GC 3 ms、24 平台线程。不是实时自动采样复验。
+3. **Lock chains：通过所列路径。** A 窗口 UTC 07:36:10.731—.822，共 24 平台线程、13 captured waiters。本地筛选 waiter，选 #53 BLOCKED → #52 BLOCKED → #51 TIMED_WAITING，末端明确没有继续报告 owner，不推断所有锁已释放。原始 DemoApplication$LockDemo 栈可读；源码跳转未执行。
+4. **JFR sampled stacks：通过所列路径。** 打开 379,643 bytes / 4,743 events / EOF 的 capture.jfr，6 个 ExecutionSample，missing/omitted/truncated 均 0。缩放 Thread.runWith 分支后滚动到 cpuPulse，4 inclusive、0 self、66.67% represented samples；分母未变，不当 CPU 时间。连接 STANDBY。
+5. **GC 与分配：通过所列路径。** memory.jfr 为 118,555 bytes / 445 events / EOF；16 GarbageCollection + 16 顶层 GCPhasePause。图分周期与暂停，选 GC #1 pause 4,590,100 ns、原 UTC 窗口。分配表 7 类，选 [B class ID 440，400 samples / 232,019,424 bytes weight / 80.164%，界面保留权重语义。自定义测试事件未被当作标准分析事件。
+6. **Recorded waits：通过所列路径。** waits.jfr 为 119,003 bytes / 17 库存事件 / EOF；14 个受支持等待、7 hotspots。Object.wait 4 个、总 274.386600 ms / 最大 153.581700 ms；fixture park 3 个、总 160.787600 ms / 最大 158.721700 ms。明确跨线程累计可重叠，不作暂停率。
+7. **发布图标/描述：通过所列路径。** Settings → Plugins → Installed 中 JVM Beacon 原创图标正常显示，版本 1.0.0-rc.2 / Philip Zhang；Overview 英文首句、功能列表和边界提示实际渲染可读。未启用/更新任何其他插件；关闭信息 tip 后 Cancel 返回项目，正常退出本沙箱。
+
+**本轮未验证：** 实时认证连接 GUI 需要人工接管，等待期间 fixture 到时结束，未输入密码、记住凭据或更改 TLS；没有把离线截图称为实时连接通过。Computer Use guidance 明确 “Do not automate user authentication dialogs”，记录人工边界而非绕过。自动认证/TLS/权限测试通过另记。Ultimate GUI 未新开验证；完整 MBean 读写/调用、通知、Watch、Hot threads、录制/下载、目标退出、项目关闭、源码定位、全部失败/取消组合、八重负载、长时采集和多缩放/辅助技术矩阵未在 rc.2 本轮逐项重跑。下方 rc.1 结果仅对应旧版本。
+
+最近日期：**2026-09-30**，时区 Asia/Shanghai（UTC+08:00）。这是部分真实界面流程的观察记录，**不代表全部 GUI 验收通过**。自动测试、安装包及兼容性检查另见 [验证与接续状态](validation.md)。
 
 ## 1.0.0-rc.1：最终包与首轮候选分开验收
 

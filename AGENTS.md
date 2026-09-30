@@ -1,6 +1,6 @@
 # JVM Beacon
 
-IDEA 原生 JMX 诊断插件；当前首发候选版本 1.0.0-rc.1（2026-09-28）。用户已授权创建并推送到现有账号 rainism0329 的私有 GitHub 仓库 JVM-Beacon；不公开仓库、不发布 Marketplace 或 GitHub Release。
+IDEA 原生 JMX/JFR 诊断插件；当前候选版本 1.0.0-rc.2（2026-09-30）。用户已授权创建并推送到现有账号 rainism0329 的私有 GitHub 仓库 JVM-Beacon；免费闭源、发布者 Philip Zhang / PhilZ Dev（vendor/philz_dev）。发布材料见 docs/marketplace/README.md；只准备，不代上传 Marketplace、不公开仓库、不创建 GitHub Release。
 
 - Java 21、IntelliJ Platform Gradle Plugin 2.x、Swing；纯 JDK 核心放在 `dev.jvmbeacon.core`，IDE 适配/UI 放在 `dev.jvmbeacon.ui`。
 - UI 复用 `BeaconUi`：OnePixelSplitter、动态主题色、DPI 间距和字体随主题更新；不恢复标准 Swing 粗分隔或固定亮色背景。

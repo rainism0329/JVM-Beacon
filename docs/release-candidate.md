@@ -1,4 +1,16 @@
-# 首发候选验收 · 1.0.0-rc.1
+# 首发候选验收
+
+## 1.0.0-rc.2 · 2026-09-30
+
+本轮准备 Marketplace 发布材料，免费闭源、源码私有、发布者 Philip Zhang / PhilZ Dev。用户自行发布；本轮不上传、不签约、不公开仓库。完整材料与手动检查入口：[Marketplace 素材](marketplace/README.md)。
+
+最终安装包 `jvm-beacon-1.0.0-rc.2.zip` 为 492,109 bytes，SHA-256 `2cde88b40c4da2037a1780b3474bdadc9a3354fda73a68e9c05a4b8df90dfccc`；JAR `adba2ca07218027783383a9f9b4018c2f7902db0e3111d46498f63837e507071`。包含原创新 Logo、Philip Zhang Vendor 信息与最终免费闭源 EULA。全量 169 tests，0 failure/error/skipped；最终包 IC/IU 251.26927.53 Verifier Compatible，各一条既有 API 提示。[全量检查](../build/reports/checks-1.0.0-rc.2-final.txt) / [最终 EULA 包检查](../build/reports/checks-1.0.0-rc.2-package.txt)。
+
+GUI 与上传截图以 [新版本 GUI 记录](gui-validation.md) 和 `marketplace/media/manifest.json` 为准，不继承下面 rc.1 的实测结论。当前支持范围仍为 Windows / IDEA 2025.1.3 / JBR 21，目标测试 JVM Corretto 21.0.9。未扩展 IDEA build 或跨 OS 支持。
+
+最终 IC 同包运行 15:25:13.196—16:00:30.996，ERROR 0 / runIde exit 0；安装信息、三个原生标签及六种离线证据视图实际操作并采集未修改的 1707×1019 PNG。实时认证 GUI 人工步骤未完成、Ultimate GUI 未复测；不由截图推断全部功能 GUI 已通过。本地发布素材 Ready gate 与关闭沙箱包检查通过，无账号提交或上传。当前仍推荐候选 EAP/Hidden 小范围试用；正式稳定版本须另行定版与对应验收。
+
+## 1.0.0-rc.1 · 历史候选
 
 目标：现有工作流可用、失败可解释、证据和资源有边界。不是实现所有愿景，也不使用“完美”替代验证。仅制作可安装的私有候选包；不公开仓库、不创建 GitHub Release、不上传 Marketplace。
 

@@ -19,6 +19,17 @@ class JmxClientIntegrationTest {
     @TempDir Path directory;
     private static final String BEAN = DemoApplication.BEAN_NAME;
 
+    @Test void publicationFixtureAliasesOnlyReportedHostAndKeepsRealDataAndAuthorization() throws Exception {
+        try (FixtureProcess fixture = new FixtureProcess(true, java.util.Map.of(), List.of("--public-demo"));
+             JmxClient operator = fixture.remote("operator"); JmxClient observer = fixture.remote("observer")) {
+            assertEquals(fixture.pid + "@beacon-demo", operator.identity().runtimeName());
+            assertTrue(operator.identity().startTime() > 0);
+            assertFalse(operator.sample().metrics().isEmpty());
+            assertEquals(5, operator.invoke(BEAN, operation(operator, "add"), List.of("2", "3")));
+            assertThrows(SecurityException.class, () -> observer.invoke(BEAN, operation(observer, "add"), List.of("2", "3")));
+        }
+    }
+
     @Test void explicitReconnectKeepsIdentityForSameJvmAndDetectsAReplacement() throws Exception {
         JmxClient.Identity first;
         try (FixtureProcess fixture = new FixtureProcess(true)) {

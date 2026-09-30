@@ -1,5 +1,5 @@
 param(
-    [ValidatePattern('^[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?$')][string]$Version = '1.0.0-rc.1',
+    [ValidatePattern('^[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?$')][string]$Version = '1.0.0-rc.2',
     [string[]]$IdeSandboxPath = @()
 )
 $ErrorActionPreference = 'Stop'

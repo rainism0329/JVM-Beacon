@@ -1,10 +1,12 @@
 # JVM Beacon
 
-IDEA 原生的 JMX 管理与 JVM 运行时诊断工作台。当前首发候选版本为 **1.0.0-rc.1**（2026-09-28）：核心流程无需云账号、外部 AI 或上传运行数据。[GitHub 源码仓库](https://github.com/rainism0329/JVM-Beacon) 为私有；未创建 GitHub Release 或发布 Marketplace。公开发布的名称、plugin ID、发布者及许可证仍需定案。
+IDEA 原生的 JMX 管理与 JVM 运行时诊断工作台。当前候选版本为 **1.0.0-rc.2**（2026-09-30）：核心流程无需云账号、外部 AI 或上传运行数据。源码仓库保持私有，准备按免费闭源方式由 **Philip Zhang / PhilZ Dev** 分发；未上传 Marketplace 或创建 GitHub Release。开发名称不代表已完成商标核查。
 
 这一轮冻结功能范围，完成凭据取消/拒绝/超时清理、首用与故障处理说明、安装包核对和现有流程验收。已有按需 MBean 读取/写入/方法调用、复杂值/通知/追踪、JFR 统一区间与火焰图/GC/分配/等待分析、录制下载、Signal timeline、线程诊断、现场保存比较、多连接标签和 `hostname:port`。界面为英文、随 IDEA 主题变化。
 
 **[English user guide](docs/user-guide.md)** · **[首发范围与验收](docs/release-candidate.md)** · [更新记录](CHANGELOG.md) · [自动检查](docs/validation.md) · [GUI 证据](docs/gui-validation.md)
+
+**[Marketplace 发布材料](docs/marketplace/README.md)** 包括原创浅/深色 Logo、英文商店介绍、真实产品截图、快速开始、更新说明、FAQ、免费闭源 EULA 与隐私说明。材料检查用 `./scripts/verify-marketplace.ps1 -Ready`；打包用 `./scripts/package-marketplace.ps1`。两者不上传或发布。
 
 第一次测试可按下方顺序操作：**安装 → 启动测试 JVM → 单连接流程 → 双连接标签页**。完整验收清单、预期结果和排错见 [测试指南](docs/testing.md)。文档中的待执行步骤不代表已经验收通过。
 
@@ -12,9 +14,9 @@ IDEA 原生的 JMX 管理与 JVM 运行时诊断工作台。当前首发候选�
 
 ## 安装与开始
 
-首次私有试用建议使用 **IntelliJ IDEA Community 2025.1.3（IC-251.26927.53）/ JBR 21 / Windows**；最终包已完成该环境的核心 GUI 流程。相同 build 的 Ultimate 已通过兼容性与加载检查，但新沙箱停在项目信任提示，GUI 待补验。Community 使用官方完整发行包；被监控测试程序使用 JDK 21。描述符范围和 Verifier 结果不等于全部环境实测。
+首次试用建议使用 **IntelliJ IDEA Community 2025.1.3（IC-251.26927.53）/ JBR 21 / Windows**；各包的 GUI 实测逐版记录在验收文档。相同 build 的 Ultimate 通过官方兼容检查，GUI 待补验；rc.1 的加载记录不冒称 rc.2 GUI 通过。Community 使用官方完整发行包；被监控测试程序使用 JDK 21。描述符范围和 Verifier 结果不等于全部环境实测。
 
-1. 在 IDEA 的 **Settings → Plugins → 齿轮 → Install Plugin from Disk…** 选择 [jvm-beacon-1.0.0-rc.1.zip](build/distributions/jvm-beacon-1.0.0-rc.1.zip)，不解压，按 IDE 提示重新启动；最终包验证状态见上方记录。
+1. 在 IDEA 的 **Settings → Plugins → 齿轮 → Install Plugin from Disk…** 选择 [jvm-beacon-1.0.0-rc.2.zip](build/distributions/jvm-beacon-1.0.0-rc.2.zip)，不解压，按 IDE 提示重新启动；该包的实际验证状态见上方记录。
 2. 打开项目，通过 **View → Tool Windows → JVM Beacon** 打开底部工具窗口。
 3. 点击 **Connect JVM…**，选择当前用户可见的本地 Java 进程，或输入 PID。若该进程尚未开启本地管理端点，需要明确勾选 **Allow starting the local management agent if needed**；这会改变目标进程状态。
 4. 连接成功后核对顶部的目标身份和启动时间。默认开启观察模式，自动采样关闭；可在“Telemetry”手动采样或开启每 2 秒采样。

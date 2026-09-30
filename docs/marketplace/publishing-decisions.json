@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-09-30",
+  "plugin": {
+    "name": "JVM Beacon",
+    "id": "dev.jvmbeacon",
+    "candidateVersion": "1.0.0-rc.2",
+    "nameTrademarkClearanceCompleted": false,
+    "marketplaceIdentityReserved": false
+  },
+  "license": {
+    "status": "decided",
+    "kind": "free-closed-source",
+    "file": "docs/marketplace/EULA.md",
+    "sourceCodeRightsGranted": false,
+    "ownerReviewBeforeSubmission": true
+  },
+  "privacy": {
+    "status": "decided",
+    "file": "docs/marketplace/privacy-policy.html",
+    "telemetry": false,
+    "automaticUpload": false,
+    "coreCloudAccountRequired": false
+  },
+  "publisher": {
+    "status": "decided",
+    "name": "Philip Zhang",
+    "vendorId": "philz_dev",
+    "contact": "https://plugins.jetbrains.com/vendor/philz_dev",
+    "vendorProfile": "https://plugins.jetbrains.com/vendor/philz_dev",
+    "emailNotInvented": true,
+    "vendorAccountSettingsReviewBeforeSubmission": true
+  },
+  "distribution": {
+    "status": "decided",
+    "pricing": "free",
+    "sourceRepositoryVisibility": "private",
+    "uploadAuthorized": false,
+    "submissionActor": "owner",
+    "preparedFor": "owner-reviewed Marketplace submission",
+    "marketplaceUploaded": false,
+    "marketplaceApproved": false
+  }
+}

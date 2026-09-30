@@ -1,4 +1,18 @@
-# 1.0.0-rc.1 验证与接续状态
+# 验证与接续状态
+
+## 1.0.0-rc.2 · 发布素材准备
+
+2026-09-30：新增原创 SVG/PNG 品牌资产、Philip Zhang Vendor 信息、免费闭源 EULA、隐私说明、英文 Listing/Getting Started/What's New/FAQ、素材核验与打包脚本、自有认证出版演示 fixture（仅 Runtime.Name 主机别名）。产品功能范围沿用 rc.1；源码保持私有，不代用户上传。
+
+169 tests / 0 failure/error/skipped；最终安装包双 IDE Verifier Compatible，各 1 条既有 deprecated API 提示。完整测试日志 `build/reports/checks-1.0.0-rc.2-final.txt`，最终 EULA 重建与 Verifier `checks-1.0.0-rc.2-package.txt`。最终包摘要见 [候选记录](release-candidate.md)；GUI 与截图 provenance 独立记录，不将自动检查当 GUI 通过。
+
+最终同包 IC 会话 15:25:13.196—16:00:30.996，正常退出 / ERROR 0，加载 JAR 与 ZIP 内一致。实测原生新图标、Philip Zhang、英文描述、三标签切换、真实离线 Timeline/锁链及 JFR 栈/GC/分配/等待交互；六张原始 1707×1019 PNG。[GUI 范围](gui-validation.md) / [图集说明](marketplace/media/README.md)。本轮实时认证 GUI 人工接管未完成、Ultimate GUI 未复测，不能写成通过。已有 rc.1 核心流程是历史证据。
+
+`verify-marketplace.ps1 -Ready` 已通过全部本地素材项：pending=[]；`verify-release.ps1 -IdeSandboxPath` 核对已关闭沙箱并通过。EULA/图标、包、决策、英文文案及六图版本/来源/尺寸/摘要匹配。检查不包括账号权限、有效 Vendor 邮箱、协议接受或 Marketplace 审核；准备材料不授予上传权限。
+
+`package-marketplace.ps1 -IdeSandboxPath` 实跑通过，生成 1,317,080 bytes / 31 文件材料 ZIP，摘要与下载入口见 [材料 README](marketplace/README.md)。另对归档内 30 项文件逐一重算 SHA-256，与 SHA256SUMS 匹配；包内手动指南/图集/品牌预览相对链接均存在，未混入源代码、凭据或原始诊断材料。英文文案终审、FAQ/EULA HTML 与源逐段核对通过；本次没有实际提交商店表单，也没有确认所有 Custom Page 编辑模式。
+
+## 1.0.0-rc.1 · 历史记录
 
 2026-09-28：**首个私有试用发布候选**，推荐环境为 Windows / 官方完整 IC 2025.1.3 / JBR 21。首发范围、SHA-256、限制和下一步集中在 [候选验收](release-candidate.md)，使用见 [英文指南](user-guide.md)。下方历史记录仍只对应各自版本。
 

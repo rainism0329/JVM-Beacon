@@ -1,0 +1,20 @@
+<h3>1. Open JVM Beacon</h3>
+<p>Install the plugin from the IDE's Plugins page and restart when prompted. Open a project, then choose <strong>View → Tool Windows → JVM Beacon</strong>.</p>
+
+<h3>2. Choose a target</h3>
+<p>Click <strong>Connect JVM…</strong>. For a local application, select its Java process or enter its PID. If it has no local management endpoint, explicitly allow starting the local management agent. This changes the target's management state; only inspect applications you are authorized to access.</p>
+<p>For remote JMX, enter <code>server.example:9010</code>, an IPv6 endpoint such as <code>[::1]:9010</code>, or a full JMX/RMI service URL. Enter credentials if required. The registry and the advertised RMI connector host/port must both be reachable. TLS settings and trusted certificates must match the server; the plugin does not downgrade security automatically.</p>
+
+<h3>3. Start a live signal</h3>
+<p>After connecting, check the target identity and start time. The initial connection takes one sample. On <strong>Telemetry</strong>, choose <strong>Start live trend</strong> or enable <strong>Auto · 2 s</strong>. Selecting a metric alone does not start sampling. JVM uptime is a useful first signal on an idle target.</p>
+
+<h3>4. Inspect an MBean or a thread</h3>
+<p>In <strong>MBeans</strong>, search for an object and select it. Choose an attribute, then <strong>Read value</strong> or press Enter. Use <strong>Explore…</strong> for supported structured results. Browsing definitions does not read every getter.</p>
+<p>To invoke an exposed method, turn off <strong>Read-only</strong>, open <strong>Operations</strong>, select the exact signature, enter supported parameters, and confirm the target. Do not repeat a timed-out operation without checking whether it already executed.</p>
+<p>On <strong>Threads</strong>, use <strong>Capture threads</strong> to read platform-thread stacks. Filter the captured rows, inspect <strong>Lock chains</strong>, or pin a baseline for a later comparison.</p>
+
+<h3>5. Preserve or explore the evidence</h3>
+<p>Use <strong>Snapshots → Save snapshot…</strong> to save collected metrics, optional platform threads and your notes. Add a tab with the tool-window <strong>+</strong> or <strong>Alt+Insert</strong>, then reopen the capture there for offline reading.</p>
+<p>For an existing recording, choose <strong>Flight Recorder → Open local .jfr…</strong>. A live JFR capture starts with <strong>Check / refresh</strong> and an explicitly confirmed bounded recording. Download it after it reaches STOPPED.</p>
+
+<p><strong>If a trend looks frozen:</strong> confirm Auto is enabled, the connection tab is visible, and sample timestamps are advancing. A flat value can be real; a gap is not recovered history. STALE means the connection ended and the retained data is older evidence. The visible error category and connection stage help identify the next step.</p>

@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.0-rc.2 — 2026-09-30
+
+- Add original light/dark Marketplace and Plugin Manager SVG logos.
+- Identify the publisher as Philip Zhang, with the existing PhilZ Dev vendor page.
+- Prepare English Marketplace copy, onboarding, FAQ, privacy disclosure and a free proprietary EULA; bundle the EULA in the plugin.
+- Capture real product screenshots from this package and controlled JVMs, with file hashes and evidence provenance.
+- Add local material validation, packaging and a bounded authenticated publication fixture. Only the fixture's reported hostname is aliased; metrics and MBean results remain real.
+
+Preparation only: no Marketplace upload, GitHub Release or public source repository.
+
 ## 1.0.0-rc.1 — 2026-09-28
 
 First release candidate for private evaluation. No Marketplace or GitHub Release has been published.

@@ -187,6 +187,8 @@ public final class DemoApplication {
 
     public static void main(String[] args) throws Exception {
         boolean remote = args.length > 0 && args[0].equals("--remote");
+        boolean publicDemo = java.util.Arrays.asList(args).contains("--public-demo");
+        if (publicDemo && !remote) throw new IllegalArgumentException("--public-demo requires authenticated --remote.");
         boolean tls = java.util.Arrays.asList(args).contains("--tls");
         if (tls && !remote) throw new IllegalArgumentException("--tls requires --remote as the first argument.");
         if (tls) configureTestTls();
@@ -234,7 +236,7 @@ public final class DemoApplication {
                 }
                 JMXServiceURL address = new JMXServiceURL("service:jmx:rmi:///jndi/rmi://127.0.0.1:" + registryPort + "/jmxrmi");
                 connector = JMXConnectorServerFactory.newJMXConnectorServer(address, environment, server);
-                connector.setMBeanServerForwarder(readOnlyGuard());
+                connector.setMBeanServerForwarder(readOnlyGuard(publicDemo));
                 connector.start();
                 System.out.println("JMX_URL=" + address);
             }
@@ -282,7 +284,7 @@ public final class DemoApplication {
     }
 
     @SuppressWarnings("removal")
-    private static MBeanServerForwarder readOnlyGuard() {
+    private static MBeanServerForwarder readOnlyGuard(boolean publicDemo) {
         AtomicReference<MBeanServer> delegate = new AtomicReference<>();
         return (MBeanServerForwarder) Proxy.newProxyInstance(DemoApplication.class.getClassLoader(), new Class<?>[]{MBeanServerForwarder.class}, (proxy, method, args) -> {
             if (method.getName().equals("setMBeanServer")) { if (!delegate.compareAndSet(null, (MBeanServer) args[0])) throw new IllegalArgumentException("Already initialized."); return null; }
@@ -290,6 +292,11 @@ public final class DemoApplication {
             Subject subject = Subject.getSubject(AccessController.getContext());
             boolean observer = subject != null && subject.getPrincipals().stream().anyMatch(principal -> principal.getName().equals("observer"));
             if (observer && Set.of("setAttribute", "setAttributes", "invoke", "createMBean", "unregisterMBean").contains(method.getName())) throw new SecurityException("Observer has server-enforced read-only access.");
+            // Only the explicit publication fixture aliases its reported host. All runtime data
+            // and operations remain real; this avoids publishing the workstation's host name.
+            if (publicDemo && method.getName().equals("getAttribute") && args.length == 2
+                    && new ObjectName("java.lang:type=Runtime").equals(args[0]) && "Name".equals(args[1]))
+                return ProcessHandle.current().pid() + "@beacon-demo";
             try { return method.invoke(delegate.get(), args); }
             catch (InvocationTargetException e) { throw e.getCause(); }
         });

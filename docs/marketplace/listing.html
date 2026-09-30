@@ -1,0 +1,23 @@
+<p><strong>JMX &amp; JFR diagnostics in IntelliJ IDEA.</strong> Inspect a running JVM, trigger an exposed MBean operation, investigate threads, and explore a recording without leaving your project.</p>
+
+<p>JVM Beacon brings live runtime signals and captured evidence into one IDE workbench. Go from a local process or remote <code>hostname:port</code> to a searchable MBean, a lock chain, a sampled stack, or a saved capture.</p>
+
+<h3>From a running JVM to useful evidence</h3>
+<ul>
+  <li><strong>Connect and keep context.</strong> Discover local Java processes, enter a PID, or connect through remote JMX/RMI. Save named remote setups and switch between up to eight independent connection tabs.</li>
+  <li><strong>Work with MBeans.</strong> Search and favorite objects, read attributes on demand, edit supported values, and invoke exposed operations with typed parameters and explicit confirmation. Explore structured results, receive notifications, or watch one numeric attribute over time.</li>
+  <li><strong>Read the runtime signals.</strong> Inspect heap, CPU, thread and GC metrics with actual sample windows. Use a shared timeline cursor, freeze an interval, and keep missing values and sampling gaps visible.</li>
+  <li><strong>Follow the thread evidence.</strong> Capture platform-thread stacks, trace reported lock owners, compare two snapshots, or measure CPU deltas for hot threads. Open source candidates when the available class and line information can be matched.</li>
+  <li><strong>Explore JFR in the IDE.</strong> Start and download a bounded recording through the target's Flight Recorder MXBean, or open a local <code>.jfr</code>. Inspect sample-count flame graphs and call trees, GC pauses, allocation samples, and recorded waits. Apply one UTC interval across the views.</li>
+  <li><strong>Keep the incident.</strong> Save metrics, an optional platform-thread snapshot, reported target identity and notes in a <code>.jvmb</code> capture. Reopen it offline or compare it with another capture.</li>
+</ul>
+
+<h3>Built for deliberate inspection</h3>
+<p>The interface follows your IDE theme and starts in read-only mode. Attribute writes, method calls and starting a recording require explicit confirmation. Requests run in the background with bounded waiting and retained data; a timed-out mutation is never retried automatically. Read-only mode is a client safeguard and does not replace server authorization.</p>
+
+<p>Core workflows need no cloud account or AI service. The plugin has no telemetry or automatic upload. Saved passwords use IDEA PasswordSafe. Captures, notes and recordings can contain application information and are not automatically redacted.</p>
+
+<h3>Know what the evidence covers</h3>
+<p>Thread snapshots and hot-thread measurements cover platform threads. JFR charts describe recorded, retained events: sample counts are not CPU percentages, allocation weights are not live-heap counts, and wait durations can overlap. Missing or truncated data is identified. Local JFR analysis is bounded to 64 MiB files and 200,000 scanned events; this is a focused workbench for captured evidence, with limits shown in the UI.</p>
+
+<p><strong>Release candidate:</strong> the initial evaluated environment is IntelliJ IDEA Community 2025.1.3, JBR 21 and Windows x64, with a JDK 21 target. Local Attach, remote access and diagnostic capabilities depend on the target JVM, permissions and server configuration.</p>

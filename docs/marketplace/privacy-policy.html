@@ -1,0 +1,25 @@
+<h2>JVM Beacon privacy notice</h2>
+<p>30 September 2026 · Developer: Philip Zhang</p>
+
+<h3>Local diagnostics and connections you choose</h3>
+<p>JVM Beacon runs inside your IDE. Core features require no cloud account or external AI service. The plugin contains no telemetry, analytics, advertising SDK or automatic upload to the Developer.</p>
+<p>When you connect to a JVM, the plugin exchanges JMX/RMI requests, credentials when required, and diagnostic results with the target endpoint you selected. Attribute writes, method arguments and recording requests go to that target. Local Attach communicates with the selected local process. A remote connection therefore transmits data over your chosen network path; server configuration determines its authentication and TLS behavior. The plugin does not add an SSH tunnel or automatically downgrade TLS.</p>
+
+<h3>Information held in memory</h3>
+<p>While a connection or offline file is open, the plugin keeps bounded diagnostic data such as reported JVM identity, metrics, MBean definitions and requested values, operation results, notifications, thread information and JFR analysis. This content can contain application names, code symbols, paths, parameters or other sensitive information supplied by the target or file. Closing a tab requests cleanup of its session; closing or cancelling does not guarantee immediate termination of every underlying network or native call or immediate erasure of every in-memory copy.</p>
+
+<h3>Local settings and passwords</h3>
+<p>If you save a remote setup, endpoint, username, alias, group and previously reported target identity are stored in local, non-roaming IDE configuration. These metadata are ordinary settings, not an encrypted secret store. Local process IDs are not saved as connection setups.</p>
+<p>Remembered passwords use IDEA PasswordSafe after a successful connection. They are not intentionally placed in project files, diagnostic exports or ordinary plugin logs. Mutable password arrays owned by the plugin are cleared when consumed or discarded; immutable copies held by Java, Swing, JMX or the storage provider cannot be guaranteed erased. Forgetting a connection setup does not delete its PasswordSafe entry. Manage stored credentials through the IDE's password-storage facilities.</p>
+
+<h3>Files you save and reopen</h3>
+<p>Saving a <code>.jvmb</code> capture writes reported target identity, retained metric samples, optional platform-thread data and your notes to the local file you choose. The capture does not include connection passwords or a remote connection URL. JFR downloads write the recording to a new local file selected by you. Reopening a capture or recording reads that file locally.</p>
+<p>Diagnostic files, copied reports, notes and recordings are <strong>not automatically redacted</strong>. A JFR may contain paths, system properties, command arguments and stacks depending on its recorded events. The plugin does not upload these files. If you share them, the destination and disclosure are your decision. Avoid putting credentials into aliases, endpoints or notes.</p>
+
+<h3>Support and third-party services</h3>
+<p>The Developer does not receive runtime data through automatic plugin reporting. If you deliberately send a support message or attach a file, you choose the information to disclose. Include only the information needed to reproduce the problem and remove private endpoints, passwords and application data.</p>
+<p>Find available support contact information on the <a href="https://plugins.jetbrains.com/vendor/philz_dev">Marketplace vendor profile</a>. After publication, the plugin's Marketplace page can also be used for non-sensitive feedback. JetBrains Marketplace, the IDE and any password-storage provider operate under their own privacy terms; their account, download, update and support systems are separate from this plugin's diagnostic processing.</p>
+
+<h3>Retention and removal</h3>
+<p>Live histories and analysis have explicit retention limits; missing or discarded history is not reconstructed. Saved files remain where you put them until you remove them. Uninstalling the plugin does not promise to erase saved files, existing IDE configuration or PasswordSafe entries. Delete each item through the relevant file, configuration or credential-storage tools.</p>
+<p>This notice describes the current plugin behavior. A version that materially changes data handling should provide an updated notice before those changes apply.</p>

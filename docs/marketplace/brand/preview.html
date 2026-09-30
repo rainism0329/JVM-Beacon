@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>JVM Beacon — brand asset preview</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 32px; background: #edf1f4; color: #152a32; font-family: system-ui, sans-serif; }
+    main { max-width: 1120px; margin: auto; }
+    h1 { margin: 0 0 8px; font-size: 26px; letter-spacing: -.5px; }
+    .intro { max-width: 720px; line-height: 1.6; margin: 0 0 24px; }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+    section { min-width: 0; padding: 24px; border-radius: 12px; background: #fff; border: 1px solid #d5dde2; }
+    .dark { color: #e5eaf0; background: #1e1f22; border-color: #3a3e44; }
+    h2 { margin: 0 0 20px; font-size: 15px; font-weight: 600; }
+    .sizes { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; }
+    figure { margin: 0; display: grid; justify-items: center; gap: 10px; }
+    figcaption { font: 12px ui-monospace, Consolas, monospace; opacity: .7; }
+    .listing { margin-top: 24px; padding-top: 20px; border-top: 1px solid #d5dde2; display: flex; align-items: center; gap: 12px; }
+    .dark .listing { border-color: #3a3e44; }
+    .listing img { flex: none; }
+    .listing strong { display: block; font-size: 16px; }
+    .listing span { display: block; margin-top: 4px; font-size: 13px; line-height: 1.45; opacity: .8; }
+    .note { margin-top: 20px; font-size: 13px; line-height: 1.6; }
+    code { font-family: ui-monospace, Consolas, monospace; }
+    @media (max-width: 720px) { body { padding: 20px; } .grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+<main>
+  <h1>JVM Beacon</h1>
+  <p class="intro">Original vector brand assets. The runtime pulse and two signal rays sit inside a console tile. This page checks scale and contrast; it does not simulate a Marketplace listing or product data.</p>
+  <div class="grid">
+    <section>
+      <h2>Light surface</h2>
+      <div class="sizes">
+        <figure><img src="jvm-beacon.svg" width="40" height="40" alt="JVM Beacon icon at 40 pixels"><figcaption>40 × 40</figcaption></figure>
+        <figure><img src="jvm-beacon.svg" width="80" height="80" alt="JVM Beacon icon at 80 pixels"><figcaption>80 × 80</figcaption></figure>
+        <figure><img src="jvm-beacon.svg" width="240" height="240" alt="JVM Beacon icon at 240 pixels"><figcaption>240 × 240</figcaption></figure>
+      </div>
+      <div class="listing"><img src="jvm-beacon.svg" width="40" height="40" alt=""><div><strong>JVM Beacon</strong><span>JMX &amp; JVM runtime diagnostics, inside your IDE.</span></div></div>
+    </section>
+    <section class="dark">
+      <h2>Dark surface</h2>
+      <div class="sizes">
+        <figure><img src="jvm-beacon-dark.svg" width="40" height="40" alt="JVM Beacon dark icon at 40 pixels"><figcaption>40 × 40</figcaption></figure>
+        <figure><img src="jvm-beacon-dark.svg" width="80" height="80" alt="JVM Beacon dark icon at 80 pixels"><figcaption>80 × 80</figcaption></figure>
+        <figure><img src="jvm-beacon-dark.svg" width="240" height="240" alt="JVM Beacon dark icon at 240 pixels"><figcaption>240 × 240</figcaption></figure>
+      </div>
+      <div class="listing"><img src="jvm-beacon-dark.svg" width="40" height="40" alt=""><div><strong>JVM Beacon</strong><span>JMX &amp; JVM runtime diagnostics, inside your IDE.</span></div></div>
+    </section>
+  </div>
+  <p class="note">The packaged icons use an exact <code>40 × 40</code> canvas. The 512-pixel export uses the same <code>0 0 40 40</code> geometry. Painted bounds stay inside <code>2.75…37.25</code>, leaving 2.75 pixels of transparent padding on every edge at 40 pixels. The preview has no external fonts, scripts, services, or image dependencies.</p>
+  <p class="note">Optional original raster previews: <a href="jvm-beacon.png">light PNG</a> · <a href="jvm-beacon-dark.png">dark PNG</a>, each 512 × 512 with transparency. These are brand assets, not product screenshots. Marketplace obtains the plugin logo from the packaged SVG.</p>
+</main>
+</body>
+</html>

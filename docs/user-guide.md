@@ -4,9 +4,9 @@ JVM Beacon is an English-language JMX and JVM diagnostics workbench inside Intel
 
 ## Install
 
-The first release candidate is **1.0.0-rc.1**. The initial evaluated environment is **IntelliJ IDEA Community 2025.1.3 (251.26927.53), its complete JBR 21, and Windows x64**. Ultimate of the same build passes API verification and loads this package, but its GUI acceptance is still pending. Build with a complete JDK 21. Target JVM validation uses Corretto 21.0.9; other JDKs, operating systems and remote-development frontends are not certified by this release. See the exact [acceptance scope](release-candidate.md).
+The current release candidate is **1.0.0-rc.2**. The initial evaluated environment is **IntelliJ IDEA Community 2025.1.3 (251.26927.53), its complete JBR 21, and Windows x64**. Ultimate of the same build passes API verification; GUI acceptance remains pending. Build with a complete JDK 21. Target JVM validation uses Corretto 21.0.9; other JDKs, operating systems and remote-development frontends are not certified by this release. See the exact [acceptance scope](release-candidate.md), which records each candidate separately.
 
-1. In **Settings → Plugins → gear → Install Plugin from Disk…**, select `jvm-beacon-1.0.0-rc.1.zip`. Keep the ZIP intact. Restart IDEA when prompted.
+1. In **Settings → Plugins → gear → Install Plugin from Disk…**, select `jvm-beacon-1.0.0-rc.2.zip`. Keep the ZIP intact. Restart IDEA when prompted.
 2. Open a project, then **View → Tool Windows → JVM Beacon**.
 3. Choose **Connect JVM…** for a live target, or **Open snapshot…** for a saved `.jvmb` file. JFR files open from the **Flight Recorder** page.
 

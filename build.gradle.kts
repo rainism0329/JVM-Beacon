@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "dev.jvmbeacon"
-version = "1.0.0-rc.1"
+version = "1.0.0-rc.2"
 
 repositories {
     mavenCentral()
@@ -49,6 +49,12 @@ intellijPlatform {
 }
 
 tasks.withType<JavaCompile>().configureEach { options.encoding = "UTF-8" }
+tasks.processResources {
+    from("docs/marketplace/EULA.md") {
+        into("META-INF")
+        rename { "LICENSE.txt" }
+    }
+}
 tasks.test {
     useJUnitPlatform()
     systemProperty("beacon.fixture.classes", sourceSets.test.get().output.classesDirs.asPath)

@@ -1,0 +1,97 @@
+{
+  "schemaVersion": 1,
+  "version": "1.0.0-rc.2",
+  "packageSha256": "2cde88b40c4da2037a1780b3474bdadc9a3354fda73a68e9c05a4b8df90dfccc",
+  "screenshots": [
+    {
+      "file": "01-timeline.png",
+      "width": 1707,
+      "height": 1019,
+      "sha256": "911d040d2dfc23127485cad0068bb2237e1bf8b75d3b09aa42b87631f865919a",
+      "caption": "Keep runtime signals together. Reopen eight real metric samples with original units, collection windows and explicit offline status.",
+      "source": {
+        "file": "build/reports/marketplace-rc2/01-timeline.png",
+        "sha256": "911d040d2dfc23127485cad0068bb2237e1bf8b75d3b09aa42b87631f865919a",
+        "pluginVersion": "1.0.0-rc.2",
+        "packagedJarSha256": "adba2ca07218027783383a9f9b4018c2f7902db0e3111d46498f63837e507071",
+        "evidence": "docs/gui-validation.md",
+        "transforms": []
+      }
+    },
+    {
+      "file": "02-lock-chains.png",
+      "width": 1707,
+      "height": 1019,
+      "sha256": "0ffa461700e180f750263e4e22bd62153ac5c022fe42df8e8078860c9e188db1",
+      "caption": "Follow reported lock owners. Inspect a captured waiter to bridge to owner chain without rereading the target.",
+      "source": {
+        "file": "build/reports/marketplace-rc2/02-lock-chains.png",
+        "sha256": "0ffa461700e180f750263e4e22bd62153ac5c022fe42df8e8078860c9e188db1",
+        "pluginVersion": "1.0.0-rc.2",
+        "packagedJarSha256": "adba2ca07218027783383a9f9b4018c2f7902db0e3111d46498f63837e507071",
+        "evidence": "docs/gui-validation.md",
+        "transforms": []
+      }
+    },
+    {
+      "file": "03-jfr-stacks.png",
+      "width": 1707,
+      "height": 1019,
+      "sha256": "4ed649dc929367e1b7c2c2cc68e96f95de682810024c08e999e80d69729b6080",
+      "caption": "Read recorded stack evidence. Zoom a sample-count flame graph and inspect cpuPulse; widths and shares are not CPU time.",
+      "source": {
+        "file": "build/reports/marketplace-rc2/03-jfr-stacks.png",
+        "sha256": "4ed649dc929367e1b7c2c2cc68e96f95de682810024c08e999e80d69729b6080",
+        "pluginVersion": "1.0.0-rc.2",
+        "packagedJarSha256": "adba2ca07218027783383a9f9b4018c2f7902db0e3111d46498f63837e507071",
+        "evidence": "docs/gui-validation.md",
+        "transforms": []
+      }
+    },
+    {
+      "file": "04-jfr-memory.png",
+      "width": 1707,
+      "height": 1019,
+      "sha256": "398883d1a12ebf95b0aa72b8788cfcbbb5f4f1af70da17e59bedfa6f9e22ca79",
+      "caption": "Separate GC cycles from pauses. Inspect a recorded pause with its exact UTC window and duration.",
+      "source": {
+        "file": "build/reports/marketplace-rc2/04-jfr-memory.png",
+        "sha256": "398883d1a12ebf95b0aa72b8788cfcbbb5f4f1af70da17e59bedfa6f9e22ca79",
+        "pluginVersion": "1.0.0-rc.2",
+        "packagedJarSha256": "adba2ca07218027783383a9f9b4018c2f7902db0e3111d46498f63837e507071",
+        "evidence": "docs/gui-validation.md",
+        "transforms": []
+      }
+    },
+    {
+      "file": "05-jfr-allocations.png",
+      "width": 1707,
+      "height": 1019,
+      "sha256": "024114d2bc77150063e4624ab73f6049f2031d4f7b11268203ac1d1eeb8f648f",
+      "caption": "Find allocation pressure. Compare retained sample weights by recorded class; shares are not live-heap percentages.",
+      "source": {
+        "file": "build/reports/marketplace-rc2/05-jfr-allocations.png",
+        "sha256": "024114d2bc77150063e4624ab73f6049f2031d4f7b11268203ac1d1eeb8f648f",
+        "pluginVersion": "1.0.0-rc.2",
+        "packagedJarSha256": "adba2ca07218027783383a9f9b4018c2f7902db0e3111d46498f63837e507071",
+        "evidence": "docs/gui-validation.md",
+        "transforms": []
+      }
+    },
+    {
+      "file": "06-jfr-waits.png",
+      "width": 1707,
+      "height": 1019,
+      "sha256": "e49630cea4fa4a310c939988ac6071b226acc668f61a98a0cb533a89daffae1f",
+      "caption": "Explore recorded waits. Compare monitor and park hotspots with event counts and durations; overlapping waits are not a pause rate.",
+      "source": {
+        "file": "build/reports/marketplace-rc2/06-jfr-waits.png",
+        "sha256": "e49630cea4fa4a310c939988ac6071b226acc668f61a98a0cb533a89daffae1f",
+        "pluginVersion": "1.0.0-rc.2",
+        "packagedJarSha256": "adba2ca07218027783383a9f9b4018c2f7902db0e3111d46498f63837e507071",
+        "evidence": "docs/gui-validation.md",
+        "transforms": []
+      }
+    }
+  ]
+}
