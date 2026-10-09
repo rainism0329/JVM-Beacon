@@ -1152,7 +1152,7 @@ public final class BeaconPanel extends JPanel implements Disposable {
         if (runner.isBusy()) { status("A request is running. The frozen interval is retained; save when it finishes."); return; }
         SnapshotStore.Snapshot capture = new SnapshotStore.Snapshot(identity, selected.getLast(), null, notes.getText(), selected);
         var file = confirmations.show(() -> FileChooserFactory.getInstance().createSaveFileDialog(new FileSaverDescriptor("Save captured timeline interval",
-                "Includes selected metrics, target identity and notes. No threads, credentials or MBean values. Review notes before sharing.", "jvmb"), project)
+                "Includes selected metrics, target identity and notes. No threads, credentials or MBean values. Review notes before sharing.", new String[]{"jvmb"}), project)
                 .save((com.intellij.openapi.vfs.VirtualFile) null, "jvm-beacon-interval-" + System.currentTimeMillis() + ".jvmb"));
         if (file == null) return;
         Path path = file.getFile().toPath();
@@ -1163,7 +1163,7 @@ public final class BeaconPanel extends JPanel implements Disposable {
     private void saveSnapshot() {
         if (identity == null || (sample == null && dump == null)) { status("Capture metrics or threads from a connected JVM, or open an existing snapshot first."); return; }
         if (runner.isBusy()) { status("A request is running. You can save the captured snapshot once it finishes."); return; }
-        var file = confirmations.show(() -> FileChooserFactory.getInstance().createSaveFileDialog(new FileSaverDescriptor("Save JVM Beacon snapshot", "Includes captured metrics, platform threads and notes. Thread names and stacks are not automatically redacted.", "jvmb"), project).save((com.intellij.openapi.vfs.VirtualFile) null, "jvm-beacon-" + System.currentTimeMillis() + ".jvmb"));
+        var file = confirmations.show(() -> FileChooserFactory.getInstance().createSaveFileDialog(new FileSaverDescriptor("Save JVM Beacon snapshot", "Includes captured metrics, platform threads and notes. Thread names and stacks are not automatically redacted.", new String[]{"jvmb"}), project).save((com.intellij.openapi.vfs.VirtualFile) null, "jvm-beacon-" + System.currentTimeMillis() + ".jvmb"));
         if (file == null) return;
         SnapshotStore.Snapshot capture = currentSnapshot(); Path path = file.getFile().toPath();
         background("Save snapshot", false, () -> { SnapshotStore.save(path, capture); return path; }, saved -> status("Snapshot saved: " + saved + ". Only data actually captured is included."));

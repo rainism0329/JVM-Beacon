@@ -1,12 +1,12 @@
 # JVM Beacon
 
-IDEA 原生的 JMX 管理与 JVM 运行时诊断工作台。当前候选版本为 **1.0.0-rc.2**（2026-09-30）：核心流程无需云账号、外部 AI 或上传运行数据。源码仓库保持私有，准备按免费闭源方式由 **Philip Zhang / PhilZ Dev** 分发；未上传 Marketplace 或创建 GitHub Release。开发名称不代表已完成商标核查。
+IDEA 原生的 JMX 管理与 JVM 运行时诊断工作台。当前候选版本为 **1.0.0-rc.3**（2026-10-09）：声明支持 **IntelliJ IDEA 2024.2 及以后，无固定版本上限**，实际跨版本结果见 [兼容矩阵](docs/compatibility.md)。核心流程无需云账号、外部 AI 或上传运行数据。既定分发方式为 **Philip Zhang / PhilZ Dev 免费闭源**；本轮检测现有仓库为公开，已暂停同步并等待用户确认可见性处理，详见兼容记录。未上传 Marketplace 或创建 GitHub Release。开发名称不代表已完成商标核查。
 
 这一轮冻结功能范围，完成凭据取消/拒绝/超时清理、首用与故障处理说明、安装包核对和现有流程验收。已有按需 MBean 读取/写入/方法调用、复杂值/通知/追踪、JFR 统一区间与火焰图/GC/分配/等待分析、录制下载、Signal timeline、线程诊断、现场保存比较、多连接标签和 `hostname:port`。界面为英文、随 IDEA 主题变化。
 
 **[English user guide](docs/user-guide.md)** · **[首发范围与验收](docs/release-candidate.md)** · [更新记录](CHANGELOG.md) · [自动检查](docs/validation.md) · [GUI 证据](docs/gui-validation.md)
 
-**[Marketplace 发布材料](docs/marketplace/README.md)** 包括原创浅/深色 Logo、英文商店介绍、真实产品截图、快速开始、更新说明、FAQ、免费闭源 EULA 与隐私说明。材料检查用 `./scripts/verify-marketplace.ps1 -Ready`；打包用 `./scripts/package-marketplace.ps1`。两者不上传或发布。
+**[Marketplace 发布材料](docs/marketplace/README.md)** 包括原创浅/深色 Logo、英文商店介绍、真实产品截图、快速开始、更新说明、FAQ、免费闭源 EULA 与隐私说明。已归档六图与材料合集对应 rc.2；rc.3 兼容性变更不能改其来源/hash充当新的截图验收。材料检查用 `./scripts/verify-marketplace.ps1 -Ready`；打包用 `./scripts/package-marketplace.ps1`。两者不上传或发布。
 
 第一次测试可按下方顺序操作：**安装 → 启动测试 JVM → 单连接流程 → 双连接标签页**。完整验收清单、预期结果和排错见 [测试指南](docs/testing.md)。文档中的待执行步骤不代表已经验收通过。
 
@@ -16,7 +16,7 @@ IDEA 原生的 JMX 管理与 JVM 运行时诊断工作台。当前候选版本�
 
 首次试用建议使用 **IntelliJ IDEA Community 2025.1.3（IC-251.26927.53）/ JBR 21 / Windows**；各包的 GUI 实测逐版记录在验收文档。相同 build 的 Ultimate 通过官方兼容检查，GUI 待补验；rc.1 的加载记录不冒称 rc.2 GUI 通过。Community 使用官方完整发行包；被监控测试程序使用 JDK 21。描述符范围和 Verifier 结果不等于全部环境实测。
 
-1. 在 IDEA 的 **Settings → Plugins → 齿轮 → Install Plugin from Disk…** 选择 [jvm-beacon-1.0.0-rc.2.zip](build/distributions/jvm-beacon-1.0.0-rc.2.zip)，不解压，按 IDE 提示重新启动；该包的实际验证状态见上方记录。
+1. 在 IDEA 的 **Settings → Plugins → 齿轮 → Install Plugin from Disk…** 选择 [jvm-beacon-1.0.0-rc.3.zip](build/distributions/jvm-beacon-1.0.0-rc.3.zip)，不解压，按 IDE 提示重新启动；该包的实际验证状态见上方记录。
 2. 打开项目，通过 **View → Tool Windows → JVM Beacon** 打开底部工具窗口。
 3. 点击 **Connect JVM…**，选择当前用户可见的本地 Java 进程，或输入 PID。若该进程尚未开启本地管理端点，需要明确勾选 **Allow starting the local management agent if needed**；这会改变目标进程状态。
 4. 连接成功后核对顶部的目标身份和启动时间。默认开启观察模式，自动采样关闭；可在“Telemetry”手动采样或开启每 2 秒采样。
@@ -173,11 +173,20 @@ v3 现场格式保存目标标识、最多 120 个保留的指标样本、一份
 
 ```powershell
 $env:JAVA_HOME = 'C:\Users\lenovo\.jdks\corretto-21.0.9'
-$beaconIde = 'D:\IdeaProjects\JVM-Beacon\.intellijPlatform\ides\community-2025.1.3'
+$beaconIde = 'D:\IdeaProjects\JVM-Beacon\.intellijPlatform\ides\community-2024.2'
 .\gradlew.bat test buildPlugin "-PlocalIdePath=$beaconIde"
 ```
 
-构建产物位于 `build/distributions/`，测试报告位于 `build/reports/tests/test/index.html`。首次构建可能需要下载 Gradle、构建插件和测试依赖；`localIdePath` 指向完整 IDEA 安装目录。上例使用本机官方 Community 包，也可将 `$beaconIde` 改为 `E:\JetBrains\IntelliJ IDEA 2025.1.3` 或自己的安装路径。
+构建产物位于 `build/distributions/`，测试报告位于 `build/reports/tests/test/index.html`。首次构建可能需要下载 Gradle、最低基线 IDEA、构建插件和测试依赖；`localIdePath` 指向完整 IDEA 安装目录。发布打包采用最低支持的官方 Community 2024.2；不传本地目录时，默认下载这个版本。现有 2025.1 与新版 SDK 用作额外 Verifier 目标，完整命令见 [兼容矩阵](docs/compatibility.md)。
+
+只需重新打包且依赖已经缓存时，可用下面的命令；先停止本项目已有的构建，避免同时争用输出目录。`--offline` 缺依赖会明确失败，不应通过清空缓存处理。
+
+```powershell
+$env:JAVA_HOME = 'C:\Users\lenovo\.jdks\corretto-21.0.9'
+.\gradlew.bat buildPlugin '-PlocalIdePath=D:\IdeaProjects\JVM-Beacon\.intellijPlatform\ides\community-2024.2' --offline --console=plain
+```
+
+若在 IDEA 右侧 Gradle 面板执行，Gradle JVM 选择 JDK 21，任务参数也可带 `-PlocalIdePath=<完整最低基线 IDEA 安装目录>`。项目关闭了构建工具的非必需 `selfUpdateCheck` 更新提示，仍固定工具版本并保留兼容检查。遇到 `initializeIntelliJPlatformPlugin → checkPluginVersion → resolveLatestVersion → SSL handshake` 等待时，配置从下一次构建生效；需停止当前构建后重跑。属性含义见 [JetBrains 官方文档](https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin-gradle-properties.html#selfUpdateCheck)（2026-10-09 核对，并核对实际 2.18.1 sources JAR）。
 
 ```powershell
 # 官方兼容性检查

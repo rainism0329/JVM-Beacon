@@ -1,13 +1,14 @@
 # JVM Beacon
 
-IDEA 原生 JMX/JFR 诊断插件；当前候选版本 1.0.0-rc.2（2026-09-30）。用户已授权创建并推送到现有账号 rainism0329 的私有 GitHub 仓库 JVM-Beacon；免费闭源、发布者 Philip Zhang / PhilZ Dev（vendor/philz_dev）。发布材料见 docs/marketplace/README.md；只准备，不代上传 Marketplace、不公开仓库、不创建 GitHub Release。
+IDEA 原生 JMX/JFR 诊断插件；当前候选版本 1.0.0-rc.3（2026-10-09）。声明 IDEA 2024.2+（since-build242），无until-build；默认最低SDK编译，精确跨版本结果见 docs/compatibility.md，不承诺未来API永不变化。用户已授权创建并推送到现有账号 rainism0329 的私有 GitHub 仓库 JVM-Beacon；免费闭源、发布者 Philip Zhang / PhilZ Dev（vendor/philz_dev）。发布材料见 docs/marketplace/README.md；只准备，不代上传 Marketplace、不公开仓库、不创建 GitHub Release。
 
 - Java 21、IntelliJ Platform Gradle Plugin 2.x、Swing；纯 JDK 核心放在 `dev.jvmbeacon.core`，IDE 适配/UI 放在 `dev.jvmbeacon.ui`。
+- 新包从最低2024.2 SDK构建；`verificationIdePaths` 用 `|` 分隔多个完整本地SDK，`verify-release -ExpectedVerificationIde` 显式指定对应精确build矩阵。FileSaverDescriptor 扩展参数显式String[]以固定242共有构造，防止新版SDK编译选择不同重载。已有rc.2截图/材料保持原版本provenance，不伪写成rc.3。
 - UI 复用 `BeaconUi`：OnePixelSplitter、动态主题色、DPI 间距和字体随主题更新；不恢复标准 Swing 粗分隔或固定亮色背景。
 - 产品界面、插件自有提示和诊断报告统一英文；保留目标返回的原始文本。与用户交流和项目文档可以中文。
 - 视觉目标是酷、极客、专业的运行时控制台：原生主题与字体、技术数据等宽、克制的信号色和清晰层级；不能用假数据、装饰性按钮或无依据的健康指示换取观感。`LIVE` 仅表示连接，数据新鲜度由采集窗口说明。
 - 验证目标为官方完整 IDEA Community 和本机 Ultimate 2025.1.3（IC/IU-251.26927.53）/ JBR 21 / Windows；编译、Verifier、加载日志与 GUI 验收分别报告，不将描述符范围视为完整兼容性实测。
-- Windows 构建：将 `JAVA_HOME` 指向 JDK 21，执行 `./gradlew.bat test buildPlugin -PlocalIdePath="<IDEA目录>"`。本机 Community 路径为 `D:\IdeaProjects\JVM-Beacon\.intellijPlatform\ides\community-2025.1.3`。官方检查 `verifyPlugin` 可用 `-PadditionalVerificationIdePath="<第二IDE目录>"` 对同一包追加目标。
+- Windows 构建：将 `JAVA_HOME` 指向 JDK 21，执行 `./gradlew.bat test buildPlugin -PlocalIdePath="<最低IDEA目录>"`。发布编译本机 Community 最低路径为 `D:\IdeaProjects\JVM-Beacon\.intellijPlatform\ides\community-2024.2`；原2025.1.3留作验证/开发目标。官方检查 `verifyPlugin` 可用 `-PverificationIdePaths="<路径1>|<路径2>"` 对同一包追加目标。
 - 开发 ID 为 `dev.jvmbeacon`。验证器缓存隔离在 build；Windows 打包前关闭本项目的 runIde 沙箱以释放 JAR 文件锁。不要关闭用户日常 IDEA。
 - 无 IDE 的核心复测：`./scripts/smoke-core.ps1 -JdkHome "<JDK21目录>"`；交互 fixture：`./scripts/run-fixture.ps1`；短时资源观察：`./scripts/soak-core.ps1`（默认 180 秒，上限 600 秒）。这不等于整体 IDE 长时性能验收。
 - 锁现场快速复测：`./scripts/capture-lock-demo.ps1 -JdkHome "<JDK21目录>"`，创建并关闭自有认证 loopback fixture，生成真实 A/B 和比较文本到新时间戳目录，成功输出 LOCK_CAPTURE_PASS；不连接已有进程。

@@ -1,6 +1,8 @@
 param(
     [ValidatePattern('^[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?$')][string]$Version = '1.0.0-rc.2',
-    [string[]]$IdeSandboxPath = @()
+    [string[]]$IdeSandboxPath = @(),
+    [ValidatePattern('^[A-Z]{2,4}-[0-9]{3}\.[0-9]+(?:\.[0-9]+){0,2}$')]
+    [string[]]$ExpectedVerificationIde = @('IC-251.26927.53', 'IU-251.26927.53')
 )
 $ErrorActionPreference = 'Stop'
 $beaconRoot = Split-Path -Parent $PSScriptRoot
@@ -32,7 +34,7 @@ function Copy-Material([string]$Source, [string]$Relative) {
 # Neither gate uploads files or grants permission to publish. Fail before creating
 # a material directory if the exact package, screenshots or decisions are pending.
 & (Join-Path $PSScriptRoot 'verify-marketplace.ps1') -Version $Version -Ready
-$beaconReleaseArguments = @{ Version = $Version }
+$beaconReleaseArguments = @{ Version = $Version; ExpectedVerificationIde = $ExpectedVerificationIde }
 if ($IdeSandboxPath.Count -gt 0) { $beaconReleaseArguments.IdeSandboxPath = $IdeSandboxPath }
 & (Join-Path $PSScriptRoot 'verify-release.ps1') @beaconReleaseArguments
 

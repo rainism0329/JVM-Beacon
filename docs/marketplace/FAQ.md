@@ -76,9 +76,13 @@ Core features need no cloud account or external AI service. JVM Beacon has no te
 
 Captures, notes, thread names/stacks and JFR recordings can contain application information. They are not automatically redacted. Review exports before sharing them. Removing a saved setup does not delete its PasswordSafe entry, and uninstalling does not promise to erase existing settings or user-saved files.
 
-## Which versions have been evaluated?
+## Which IDEA versions are supported, and which have been evaluated?
 
-The initial GUI acceptance environment is IntelliJ IDEA Community 2025.1.3 (251.26927.53), JBR 21, Windows x64 and a Corretto 21.0.9 target. Ultimate of the same build passed API verification and loading checks in the first candidate, with GUI acceptance pending. A declared compatibility range is not a statement that every IDE/JDK/OS combination was tested.
+The plugin declares IntelliJ IDEA **2024.2 and later (build 242+)**, with **no fixed upper IDE version limit**. That declaration permits installation on newer IDEA versions. It does not establish that every IDE/JDK/OS combination or every future version was tested. Future platform API changes can require plugin updates. The compilation baseline is the 2024.2 platform line, and the plugin uses Java 21 at IDE runtime.
+
+Historical GUI acceptance used IntelliJ IDEA Community 2025.1.3 (251.26927.53), JBR 21, Windows x64 and a Corretto 21.0.9 target. Ultimate of that build passed API verification and loading checks in the earlier candidate, with GUI acceptance pending in that historical record. These entries do not certify the current candidate's GUI on every version in its declared range.
+
+Build, API-verification and GUI results are tracked separately. The detailed version matrix is maintained in the source-checkout validation record, `docs/compatibility.md`. That file path is project documentation, not a public support URL; the declared installation range must not be read as a blanket test result.
 
 Local JFR analysis accepts files up to 64 MiB and scans at most 200,000 events with a five-second cooperative budget, plus separate retained-data limits. A single JDK parser call is not hard-isolated. Connect waiting is bounded to 20 seconds and ordinary requests to eight seconds; underlying RMI/native calls may continue after cancellation.
 

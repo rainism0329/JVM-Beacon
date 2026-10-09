@@ -4,7 +4,7 @@ JVM Beacon is an English-language JMX and JVM diagnostics workbench inside Intel
 
 ## Install
 
-The current release candidate is **1.0.0-rc.2**. The initial evaluated environment is **IntelliJ IDEA Community 2025.1.3 (251.26927.53), its complete JBR 21, and Windows x64**. Ultimate of the same build passes API verification; GUI acceptance remains pending. Build with a complete JDK 21. Target JVM validation uses Corretto 21.0.9; other JDKs, operating systems and remote-development frontends are not certified by this release. See the exact [acceptance scope](release-candidate.md), which records each candidate separately.
+The current release candidate is **1.0.0-rc.3**. Its declared IDEA range starts at **2024.2 / build 242, without a fixed upper build limit**. Compile with JDK 21 against the minimum supported SDK. A future IDE can install the plugin, but platform API changes may require a plugin update. See the exact [compatibility matrix](compatibility.md) for completed checks and remaining gaps. Historical GUI acceptance used **IntelliJ IDEA Community 2025.1.3 / JBR 21 / Windows x64**; those rc.2 results do not certify the rc.3 GUI. Target JVM validation uses Corretto 21.0.9; other JDKs, operating systems and remote-development frontends are not certified by this release.
 
 1. In **Settings → Plugins → gear → Install Plugin from Disk…**, select `jvm-beacon-1.0.0-rc.2.zip`. Keep the ZIP intact. Restart IDEA when prompted.
 2. Open a project, then **View → Tool Windows → JVM Beacon**.

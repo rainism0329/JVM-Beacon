@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.0-rc.3 — 2026-10-09
+
+- Declare IntelliJ IDEA 2024.2 and later, without a fixed upper build limit.
+- Build against the minimum Java 21 platform and verify an explicit matrix of older/newer IDEs; see docs/compatibility.md for actual results.
+- Pin save-dialog extension arguments to the public array signature shared with the minimum SDK, including when compiling with a newer SDK.
+- Disable the build tool's optional online version notice, which could stall at an HTTPS handshake; IDE plugin updates and compatibility checks remain enabled.
+- Strengthen local release checks to read the actual descriptor range, verify exact requested IDE reports and reject stale package results.
+
+Declared future installation eligibility is a maintenance policy, not proof that all future APIs remain compatible. Historical rc.2 screenshots retain their original provenance. No Marketplace upload or GitHub Release.
+
 ## 1.0.0-rc.2 — 2026-09-30
 
 - Add original light/dark Marketplace and Plugin Manager SVG logos.

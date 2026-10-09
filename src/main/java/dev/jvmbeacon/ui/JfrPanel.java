@@ -297,7 +297,7 @@ final class JfrPanel extends JPanel {
         if (!ready(active, false, "Download JFR")) return;
         if (state == null || !"STOPPED".equals(state.state())) { status.accept("Download was not submitted. Refresh and verify that the recording is STOPPED first."); return; }
         var file = confirmations.show(() -> FileChooserFactory.getInstance().createSaveFileDialog(new FileSaverDescriptor("Download JFR to a new local file",
-                "Not redacted. Opens a target stream; up to 64 MiB / 45 s. Existing files are never overwritten.", "jfr"), project)
+                "Not redacted. Opens a target stream; up to 64 MiB / 45 s. Existing files are never overwritten.", new String[]{"jfr"}), project)
                 .save((com.intellij.openapi.vfs.VirtualFile) null, "jvm-beacon-" + System.currentTimeMillis() + ".jfr"));
         if (file == null || !ready(active, false, "Download JFR")) return;
         jobs.run("Download JFR · No automatic retry", true, 60_000, () -> active.jfr().download(file.getFile().toPath()),

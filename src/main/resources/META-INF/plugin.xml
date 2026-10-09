@@ -13,16 +13,17 @@
       </ul>
       <p>No cloud account, AI service or plugin telemetry. Credentials use IDEA PasswordSafe.
       Diagnostic files are not automatically redacted. Platform-thread snapshots do not cover virtual threads.</p>
-      <p>Release candidate. Evaluated on Windows with IntelliJ IDEA Community 2025.1.3
-      and JBR 21. Other environments require validation. Thread snapshots cover platform threads;
+      <p>For IntelliJ IDEA 2024.2 and later, with no fixed upper IDE version limit.
+      Release candidate; a declared range does not mean every IDE or future release has been tested.
+      Thread snapshots cover platform threads;
       JFR analysis describes recorded events and applies explicit file and retention limits.</p>
     ]]></description>
     <change-notes><![CDATA[
-      <p>1.0.0-rc.2: publication assets and final release preparation.</p>
+      <p>1.0.0-rc.3: broader IntelliJ IDEA compatibility.</p>
       <ul>
-        <li>Original light and dark plugin logos for the Plugin Manager and Marketplace.</li>
-        <li>Clear English introduction, first-use guidance and evidence-aware capability descriptions.</li>
-        <li>Reproducible checks for packaged logos, screenshots and publication materials.</li>
+        <li>Allow IntelliJ IDEA 2024.2 and later without a fixed upper build limit.</li>
+        <li>Compile against the oldest supported platform and verify selected older and newer IDEs.</li>
+        <li>Skip the build tool's optional online update notice to avoid network stalls.</li>
       </ul>
     ]]></change-notes>
     <depends>com.intellij.modules.platform</depends>

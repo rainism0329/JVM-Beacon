@@ -1,5 +1,13 @@
 # 首发候选验收
 
+## 1.0.0-rc.3 · 2026-10-09
+
+声明范围扩大到 **IDEA2024.2/build242 起、无until-build**；默认最低SDK编译，保留Java21客户端要求。精确SDK、构建/测试/Verifier与未完成项集中在 [兼容记录](compatibility.md)。不把开放未来安装权限宣传成永久API兼容保证。
+
+新包与旧rc.2分开；默认保存对话框显式数组签名避免新SDK编译选中242不存在的重载。release核对可传精确IDE矩阵，并验证当前版本报告/包大小/实际描述符。rc.2图集与材料合集保持原provenance，本轮未假称rc.3全GUI/素材Ready已通过；不代上传。
+
+最终ZIP492,095bytes，SHA-256 `aafcd78925d8c23a65a5a2f6d7dec1efcb2f19150f7e2e5405fa5e63802511a2`；[安装包](../build/distributions/jvm-beacon-1.0.0-rc.3.zip)。最低2024.2 SDK全量169tests通过；同包IC2024.2、IC2024.2.4、IC/IU2025.1.3、IU2026.2.3官方Verifier均Compatible，分别1/1/4/4/4条既有/公共弃用API用法提示。精确机器核对通过；本轮未新GUI加载/交互验收，尚未重新制作rc.3素材Ready包。
+
 ## 1.0.0-rc.2 · 2026-09-30
 
 本轮准备 Marketplace 发布材料，免费闭源、源码私有、发布者 Philip Zhang / PhilZ Dev。用户自行发布；本轮不上传、不签约、不公开仓库。完整材料与手动检查入口：[Marketplace 素材](marketplace/README.md)。

@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "dev.jvmbeacon"
-version = "1.0.0-rc.2"
+version = "1.0.0-rc.3"
 
 repositories {
     mavenCentral()
@@ -16,7 +16,8 @@ java { toolchain { languageVersion = JavaLanguageVersion.of(21) } }
 dependencies {
     intellijPlatform {
         val localIde = providers.gradleProperty("localIdePath").orNull
-        if (localIde != null) local(localIde) else intellijIdeaUltimate("2025.1.3")
+        // Compile against the first Java 21 platform, not a newer SDK's APIs.
+        if (localIde != null) local(localIde) else intellijIdeaCommunity("2024.2")
         bundledPlugin("com.intellij.java")
         pluginVerifier("1.408")
     }
@@ -36,7 +37,10 @@ intellijPlatform {
     pluginConfiguration {
         name = "JVM Beacon"
         version = project.version.toString()
-        ideaVersion { sinceBuild = "251.26927"; untilBuild = "251.*" }
+        ideaVersion {
+            sinceBuild = "242"
+            untilBuild = provider { null }
+        }
     }
     pluginVerification {
         ides {
@@ -44,6 +48,8 @@ intellijPlatform {
             if (localIde != null) local(localIde) else current()
             val additionalIde = providers.gradleProperty("additionalVerificationIdePath").orNull
             if (additionalIde != null) local(additionalIde)
+            providers.gradleProperty("verificationIdePaths").orNull
+                ?.split('|')?.filter { it.isNotBlank() }?.forEach { local(it) }
         }
     }
 }

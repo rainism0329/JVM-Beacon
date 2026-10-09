@@ -1,5 +1,7 @@
 # JVM Beacon · Marketplace 发布素材
 
+**2026-10-09：当前工程为 rc.3，扩展 IDEA 范围到2024.2+并取消上限，实际矩阵见 [兼容记录](../compatibility.md)。英文 listing/FAQ/更新说明已随策略更新；下方已归档 ZIP、六图与Ready结果仍属于原始 rc.2，并未重新标为rc.3。新安装包不能与旧manifest混用，rc.3发布材料Ready需对应版本GUI来源再验收。**
+
 本目录准备 **1.0.0-rc.2** 的公开上架材料，更新于 **2026-09-30**。用户已决定免费闭源，源码继续保留私有；发布者为 **Philip Zhang**，使用已有 [PhilZ Dev Vendor](https://plugins.jetbrains.com/vendor/philz_dev)。当前任务是完成材料与本地验收，**用户自行上传；没有代为上传、签约或公开仓库的授权**。自动检查通过表示本地材料齐备，不表示商店审核通过。
 
 ## 可以直接使用的素材

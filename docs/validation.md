@@ -1,5 +1,11 @@
 # 验证与接续状态
 
+## 1.0.0-rc.3 · 兼容范围扩展
+
+2026-10-09，最低编译/代表性平台结果与限制集中在 [兼容记录](compatibility.md)，不将历史rc.2 GUI截图当作新包验收。声明开放2024.2+未来安装，无until-build；公共保存构造使用显式数组。先前长时间build诊断为构建工具自更新检查SSL握手等待，已通过官方selfUpdateCheck开关关闭其更新提示，非禁用插件实际更新。没有改安全配置或清用户缓存。
+
+最终最低2024.2 SDK编译，全量169 tests / 0 failure/error/skipped；五目标IC242.20224.300 / IC242.23726.103 / IC251.26927.53 / IU251.26927.53 / IU262.10968.63官方Verifier均Compatible，显式矩阵release核对通过。安装492,095bytes、开放实际描述符与摘要见兼容记录；未新GUI验收。原rc.2本地安装ZIP曾由用户15:28重打为492112bytes，不能拿旧492109报告验收，脚本已正确拒绝；旧原始材料合集的内层ZIP仍保留原先SHA，未替换。
+
 ## 1.0.0-rc.2 · 发布素材准备
 
 2026-09-30：新增原创 SVG/PNG 品牌资产、Philip Zhang Vendor 信息、免费闭源 EULA、隐私说明、英文 Listing/Getting Started/What's New/FAQ、素材核验与打包脚本、自有认证出版演示 fixture（仅 Runtime.Name 主机别名）。产品功能范围沿用 rc.1；源码保持私有，不代用户上传。
